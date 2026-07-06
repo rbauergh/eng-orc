@@ -7,6 +7,7 @@
 
 healthCheckTimeout: 900
 logLevel: info
+includeAliasesInList: true   # orc and Letta address models via the role aliases
 
 macros:
   srv: "${env.HOME}/llama.cpp/build/bin/llama-server --host 127.0.0.1 --port ${PORT}"

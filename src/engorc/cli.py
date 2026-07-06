@@ -405,8 +405,14 @@ def doctor() -> None:
         from .llm.catalog import chat_model_roles
 
         served = set(svc.client.model_ids())
+        alias_hint = (
+            "not in /v1/models — if this is a llama-swap alias, set "
+            "includeAliasesInList: true in the llama-swap config and restart it"
+        )
         for name, role_model in chat_model_roles(config).items():
-            row(f"model role: {name}", role_model.model in served, role_model.model)
+            ok_role = role_model.model in served
+            row(f"model role: {name}", ok_role, role_model.model if ok_role else
+                f"{role_model.model}: {alias_hint}")
         for seat in config.review.panel:
             try:
                 seat_model = config.models.for_role(seat.model_role)

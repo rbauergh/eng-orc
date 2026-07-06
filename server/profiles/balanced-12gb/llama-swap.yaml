@@ -8,6 +8,8 @@
 
 healthCheckTimeout: 600   # first load of the 35B MoE from a cold page cache is slow
 logLevel: info
+includeAliasesInList: true   # orc and Letta address models via the role aliases
+                             # (coder/planner/...) and check them against /v1/models
 
 macros:
   srv: "${env.HOME}/llama.cpp/build/bin/llama-server --host 127.0.0.1 --port ${PORT}"

@@ -144,10 +144,25 @@ def ask(project: str, note: str) -> None:
 
 
 @app.command()
+def dashboard(
+    interval: float = typer.Option(2.0, help="refresh seconds"),
+    once: bool = typer.Option(False, "--once", help="print one snapshot and exit"),
+) -> None:
+    """Live top-style view: resident model, GPU, projects, current work, activity."""
+    from .obs.dashboard import run_dashboard
+
+    run_dashboard(services(), interval=interval, once=once)
+
+
+@app.command()
 def status(project: str | None = typer.Argument(None)) -> None:
     """Status of all projects, or a deep dive on one."""
     svc = services()
+    config = svc.config
     if project is None:
+        _console().print(
+            f"profile [bold]{escape(config.models.profile)}[/bold] · home {escape(str(config.home))}"
+        )
         table = Table(title="projects", show_lines=False)
         for column in ("project", "pri", "phase", "state", "plan", "gates", "active", "steps"):
             table.add_column(column)
@@ -163,6 +178,7 @@ def status(project: str | None = typer.Argument(None)) -> None:
                 str(meta.counters.get("steps", 0)),
             )
         _console().print(table)
+        _console().print(f"[dim]projects live in {escape(str(config.projects_dir))}[/dim]")
         return
 
     proj = svc.registry.get(project)
@@ -170,6 +186,8 @@ def status(project: str | None = typer.Argument(None)) -> None:
     _console().print(f"[bold]{escape(meta.title)}[/bold]  ({escape(meta.slug)})")
     _console().print(f"phase [cyan]{meta.phase}[/cyan] · state [cyan]{meta.state}[/cyan] "
                      f"{escape('· ' + meta.state_reason) if meta.state_reason else ''}")
+    _console().print(f"[dim]root: {escape(str(proj.root))}[/dim]")
+    _console().print(f"[dim]workroom (the code): {escape(str(proj.workroom))}[/dim]")
     plan = proj.load_plan()
     if plan.items:
         table = Table(title="plan")

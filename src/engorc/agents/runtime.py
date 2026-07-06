@@ -203,6 +203,10 @@ class ToolLoop:
                 continue
 
             result = tool.run(self.ctx, action.args, action.payload)
+            log.debug(
+                f"{self.role_name} turn {turn_no}/{max_turns}: {action.tool}"
+                + ("" if result.ok else " (failed)")
+            )
             if result.ok and result.data.get("path") and result.data.get("action") in ("write", "edit"):
                 path = str(result.data["path"])
                 if path not in touched:

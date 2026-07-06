@@ -62,6 +62,9 @@ class Scheduler:
         project = queue[0]
         project_slug = project.root.name
 
+        from .supervisor import next_phase
+
+        log.step(project_slug, f"→ {next_phase(project)} …")
         lock = FileLock(self.config.gpu_lock_path, timeout=self.config.scheduler.gpu_lock_timeout)
         lock.acquire(label=project_slug)
         try:

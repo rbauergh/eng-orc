@@ -305,6 +305,11 @@ def _run_item_loop(
     item.touch()
     project.save_plan(plan)
     project.journal.append(Kind.ATTEMPT_STARTED, actor=role_name, item=item.id, attempt=attempt.id)
+    log.agent(
+        role_name,
+        f"starting '{shorten(item.title, 60)}' "
+        f"(attempt {len(item.attempts)}/{config.run.max_attempts_per_item}, model {role_model.model})",
+    )
 
     ctx = ToolContext(
         project=project,

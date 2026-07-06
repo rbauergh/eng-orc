@@ -1,5 +1,5 @@
 # orc diagnostics report
-_generated 2026-07-06T06:28:21+00:00 · eng-orc 0.1.0 (commit 7103797+dirty) · python 3.12.3 · Linux-5.15.133.1-microsoft-standard-WSL2-x86_64-with-glibc2.39_
+_generated 2026-07-06T17:50:19+00:00 · eng-orc 0.1.0 (commit c711936) · python 3.12.3 · Linux-5.15.133.1-microsoft-standard-WSL2-x86_64-with-glibc2.39_
 
 ## Environment checks
 - [ok] home writable — /home/rbauer/.eng-orc
@@ -141,6 +141,9 @@ run:
   coder_fallbacks:
   - coder-fallback
   triage_rounds: 2
+  test_first: auto
+  review_tests: true
+  intake_rounds: 10
   max_tool_output_chars: 6000
   shell_timeout: 300.0
   verify_timeout: 600.0
@@ -197,77 +200,27 @@ scheduler:
 log_level: info
 ```
 
+## GPU
+- resident: jina-embed (ready)
+  slots: [{"id": 0, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 8192, "speculative": false, "is_processing": false, "id_task": 19721, "n_prompt_tokens": 1, "n_prompt_tokens_processed": 1, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 40, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": -1, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": -1, "n_predict": -1, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "Content-only", "reasoning_format": "none", "reasoning_in_content": false, "generation_prompt": "", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": true, "has_new_line": false, "n_remain": -1, "n_deco
+- resident: qwen3.6-35b (ready)
+  slots: [{"id": 0, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 49152, "speculative": false, "is_processing": false, "id_task": 8355, "n_prompt_tokens": 5203, "n_prompt_tokens_processed": 88, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 20, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": 49152, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": 4096, "n_predict": 4096, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "peg-native", "reasoning_format": "deepseek", "reasoning_in_content": false, "generation_prompt": "<|im_start|>assistant\n<think>\n", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": fals
+- 17:25:15 nemotron-3-nano loading …
+- 17:25:17 nemotron-3-nano load aborted after 2s
+- 17:25:17 gpt-oss-20b loading …
+- 17:25:44 gpt-oss-20b loaded in 27s
+- 17:25:49 gpt-oss-20b loading …
+- 17:25:51 gpt-oss-20b load aborted after 2s
+- 17:25:51 qwen3.6-35b loading …
+- 17:26:33 qwen3.6-35b loaded in 42s
+
 ## Projects
 ### hello-world-script
-phase build · state active (user answered) · plan 0/1 · open gates 0
+phase done · state done (mission wrapped) · plan 1/1 · open gates 0
 
 | item | title | status | attempts | triaged |
 | --- | --- | --- | --- | --- |
-| 6sm11d | Implement `script.py` with hello-world output | in_progress | 1 | 1 |
-
-#### problem item 6sm11d: Implement `script.py` with hello-world output (in_progress)
-acceptance: `script.py` exists at the project root.; Execution via `python script.py` outputs exactly `Hello, World!\n` to stdout.; The process terminates with exit code 0.
-- attempt [implementer/coder] None: 
-- note: review[adversarial] BUG/blocker: The required script.py file is missing from the repository, so the implementation does not perform the expected hello‑world output. → Create a script.py file at the project root containing a shebang `#!/usr/bin/env python3`, a…
-- note: review[tests] TEST_GAP/blocker: The diff input is empty. The acceptance criteria cannot be verified because the implementation of `script.py` is missing. → Provide the code diff for `script.py` to proceed with the review.
-- note: earlier attempt (implementer): review panel requested changes (2 blocking finding(s) across 3 reviewer(s))
-- note: earlier attempt (implementer): three malformed replies in a row
-- note: user guidance: simplify - this should just be a script that returns hello world
-- note: review[adversarial] BUG/blocker: The required `script.py` file is missing from the project root or does not contain the specified shebang, `main()` function, or execution guard, making it impossible to satisfy the acceptance criteria. → Create `script.py` at …
-- note: triage#1: The item was over-specified with boilerplate requirements (`main()`, shebang, `__name__` guard) that are not part of the charter success criteria. This caused the implementer to generate empty diffs,…
-- note: triage guidance: Strip all boilerplate requirements. The implementer is likely overcomplicating the structure or failing to commit the file correctly due to the extra constraints. A single `print("Hello, World!")` statement satisfies the charter. Focus strict…
-
-latest attempt transcript (tail):
-```
-…[230 chars elided]…
-ot. - `python script.py` outputs exactly `Hello, World!\n` to stdout. - Process …
-
-## Turn 1
-### Model
-The previous attempts were interrupted or failed due to systemic issues (reviewer infrastructure errors, malformed replies), not because the implementation was wrong. The design and prior code show the correct content for `script.py`. I will create the file with the minimal, charter-aligned content (`print("Hello, World!")`) and verify it runs correctly.
-
-ACTION: write_file {"path": "script.py"}
-```python
-print("Hello, World!")
-```
-### Observation
-wrote script.py (1 lines)
-
-## Turn 2
-### Model
-ACTION: run_tests {}
-### Observation
-[PASS] python script.py
-
-## Turn 3
-### Model
-All acceptance criteria are met: `script.py` exists at the project root, outputs exactly `Hello, World!\n`, and exits with code 0.
-
-ACTION: finish {"status": "done"}
-### Observation
-finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
-
-## Turn 4
-### Model
-ACTION: finish {"status": "done", "payload": "Created `script.py` at the project root with a single line: `print(\"Hello, World!\")`. This satisfies all acceptance criteria: the file exists, outputs exactly `Hello, World!\\n` to stdout, and exits with code 0. The implementation is minimal and charter-aligned, avoiding unnecessary boilerplate (no shebang, no `main()`, no `__name__` guard) as advised by triage to prevent over-specification. Previous failures were due to reviewer infrastructure errors and malformed replies, not incorrect code.\n\nNo further action needed. The task is complete."}
-### Observation
-finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
-
-## Turn 5
-### Model
-ACTION: finish {"status": "done"}
-
-```payload
-Created `script.py` at the project root containing a single line: `print("Hello, World!")`. This satisfies all acceptance criteria:
-- File exists at project root.
-- `python script.py` outputs exactly `Hello, World!\n` to stdout.
-- Process exits with code 0.
-
-The implementation is minimal and charter-aligned. No further action needed.
-```
-### Observation
-finishing with status=done
-```
+| 6sm11d | Implement `script.py` with hello-world output | done | 1 | 1 |
 
 gates:
 - answered [supervisor] Q: I am stuck: these work items failed repeatedly and block progress. Advise (simplify, drop, or give direction): Implement `script.py` with hello-world output: three malformed replies in a row → A: drop
@@ -283,17 +236,84 @@ recent errors:
 - [07-06T06:21] [triage] systemic: Monitor reviewer panel recovery before expecting review approvals to resolve. Code changes should prioritize minimal, charter-aligned implementations to avoid context overloads.
 
 recent activity:
-- [07-06T06:21] error[triage]: systemic: Implementer pipeline is generating malformed replies or empty diffs on simple tasks, likely due to over-constrained prompts or context window pressur…
-- [07-06T06:21] error[triage]: systemic: Monitor reviewer panel recovery before expecting review approvals to resolve. Code changes should prioritize minimal, charter-aligned implementations…
-- [07-06T06:21] attempt started by implementer on wi_1kwty2343wv6sm11d
-- [07-06T06:21] attempt on wi_1kwty2343wv6sm11d: done — Created `script.py` at the project root containing a single line: `print("Hello, World!")`. This satisfies all acceptance criteria: - File …
-- [07-06T06:21] verify on wi_1kwty2343wv6sm11d: PASS
-- [07-06T06:21] review on wi_1kwty2343wv6sm11d: approve (0 findings)
 - [07-06T06:22] review on wi_1kwty2343wv6sm11d: approve (1 findings)
+- [07-06T06:29] review on wi_1kwty2343wv6sm11d: approve (1 findings)
+- [07-06T06:30] review on wi_1kwty2343wv6sm11d: approve (1 findings)
+- [07-06T06:30] commit e82ce5e: Implement `script.py` with hello-world output
+- [07-06T06:30] item wi_1kwty2343wv6sm11d → done
+- [07-06T06:31] entered phase wrap
+- [07-06T06:31] entered phase done
+- [07-06T06:31] state → done mission wrapped
+
+### local-hello-world-time-server
+phase build · state blocked_on_user (work items exhausted their attempts) · plan 0/4 · open gates 1
+
+| item | title | status | attempts | triaged |
+| --- | --- | --- | --- | --- |
+| d9xa5d | Initialize project dependencies | failed | 3 | 1 |
+| zv0tm2 | Implement Flask application entry point | todo | 0 | 0 |
+| h2kd1j | Create HTML template with client-side clock | todo | 0 | 0 |
+| f13ekd | Add smoke test for integration verification | todo | 0 | 0 |
+
+#### problem item d9xa5d: Initialize project dependencies (failed)
+acceptance: `requirements.txt` exists and lists `flask`.; `pip install -r requirements.txt` has been executed successfully.; `python -c "import flask"` succeeds without error.
+- attempt [implementer/coder] fail: review panel requested changes (1 blocking finding(s) across 4 reviewer(s))
+  verification: [PASS] python -c "import flask"
+- attempt [implementer/coder] fail: review panel requested changes (1 blocking finding(s) across 4 reviewer(s))
+  verification: [PASS] python -c "import flask"
+- attempt [implementer/coder-fast] stuck: three malformed replies in a row
+- note: review[architecture] BUG/blocker: Flask is not installed; only requirements.txt created. → Run `pip install -r requirements.txt` to install Flask into the current environment.
+- note: review[architecture] TEST_GAP/blocker: The acceptance criteria require Flask to be installed in the environment, but the diff only creates requirements.txt and does not execute any installation command. → Add a step to install Flask, e.g., run `pip install -r…
+- note: triage#1: The agent is failing to execute the installation command required by the acceptance criteria, resulting in a reviewer blocker. The verification command passed, but the reviewer is checking the diff a…
+- note: triage guidance: The acceptance criteria requires Flask to be installed, but the agent only creates the requirements file. You must explicitly run `pip install -r requirements.txt` and verify the import. Update the acceptance criteria to require the installat…
+- note: review[architecture] TEST_GAP/blocker: The diff adds requirements.txt but does not demonstrate the required pip install execution or the import verification step. → Run `pip install -r requirements.txt` and verify the installation with `python -c "import flas…
+- note: review[architecture] TEST_GAP/major: Acceptance criteria require execution of `pip install -r requirements.txt` and verification that `python -c "import flask"` succeeds, but these steps are not shown in the diff. → Run `pip install -r requirements.txt` and v…
+
+latest attempt transcript (tail):
+```
+# implementer attempt — stuck
+_2026-07-06T17:25:48+00:00_
+
+**Summary:** three malformed replies in a row
+
+## Turn 1
+### Model
+
+### Observation
+FORMAT ERROR: your reply had no visible content — if you were reasoning, you likely spent the whole output budget on it. Answer with a ONE-sentence thought and the ACTION line immediately.
+
+## Turn 2
+### Model
+
+### Observation
+FORMAT ERROR: your reply had no visible content — if you were reasoning, you likely spent the whole output budget on it. Answer with a ONE-sentence thought and the ACTION line immediately.
+
+## Turn 3
+### Model
+
+### Observation
+FORMAT ERROR: your reply had no visible content — if you were reasoning, you likely spent the whole output budget on it. Answer with a ONE-sentence thought and the ACTION line immediately.
+```
+
+gates:
+- OPEN [supervisor] Triage could not unstick these items and I need direction (simplify the goal, drop them, or point at the fix): - 'Initialize project dependencies': three malformed replies in a row | triage#1: The agent is failing to execute the installation command required by the acceptance criteria, resulting in a reviewer blocker. The verification command passed, but the reviewer is checking the diff a…
+
+recent errors:
+- [07-06T16:45] [planner] PlanDraft failed validation after 3 rounds: Unterminated string starting at: line 2 column 16 (char 17)
+- [07-06T17:09] [triage] systemic: [planner] PlanDraft failed validation after 3 rounds: Unterminated string starting at: line 2 column 16 (char 17) - JSON parsing error in planner.
+- [07-06T17:35] [triage] TriageReport failed validation after 3 rounds: Expecting value: line 1 column 1 (char 0)
+
+recent activity:
+- [07-06T17:23] review on wi_1kww5db8hbpd9xa5d: approve (0 findings)
+- [07-06T17:25] review on wi_1kww5db8hbpd9xa5d: request_changes (1 findings)
+- [07-06T17:25] attempt started by implementer on wi_1kww5db8hbpd9xa5d
+- [07-06T17:25] attempt on wi_1kww5db8hbpd9xa5d: stuck — three malformed replies in a row
+- [07-06T17:35] error[triage]: TriageReport failed validation after 3 rounds: Expecting value: line 1 column 1 (char 0)
+- [07-06T17:35] state → blocked_on_user work items exhausted their attempts
 
 ## llama-swap service log (tail)
 ```
-Jul 05 23:27:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 711.852µs Jul 05 23:27:57 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 91.533µs Jul 05 23:27:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 41.859µs Jul 05 23:27:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1403 "python-httpx/0.28.1" 40.640538ms Jul 05 23:27:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 654.097µs Jul 05 23:28:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 54.674µs Jul 05 23:28:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 62.539µs Jul 05 23:28:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1403 "python-httpx/0.28.1" 17.564762ms Jul 05 23:28:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 683.177µs Jul 05 23:28:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 106.392µs Jul 05 23:28:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 56.737µs Jul 05 23:28:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1403 "python-httpx/0.28.1" 24.735241ms Jul 05 23:28:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 817.221µs Jul 05 23:28:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 86.023µs Jul 05 23:28:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 35.878µs Jul 05 23:28:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1402 "python-httpx/0.28.1" 32.387847ms Jul 05 23:28:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 702.393µs Jul 05 23:28:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 51.168µs Jul 05 23:28:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 37.712µs Jul 05 23:28:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1402 "python-httpx/0.28.1" 14.622699ms Jul 05 23:28:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 724.907µs Jul 05 23:28:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 42.761µs Jul 05 23:28:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 67.007µs Jul 05 23:28:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1401 "python-httpx/0.28.1" 41.56217ms Jul 05 23:28:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 684.203µs Jul 05 23:28:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "POST /v1/chat/completions HTTP/1.1" 200 15301 "python-httpx/0.28.1" 2m23.611713937s Jul 05 23:28:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 126.439µs Jul 05 23:28:11 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 64.332µs Jul 05 23:28:11 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1401 "python-httpx/0.28.1" 29.638053ms Jul 05 23:28:11 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 800.489µs Jul 05 23:28:13 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 56.087µs Jul 05 23:28:13 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 79.1µs Jul 05 23:28:13 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1401 "python-httpx/0.28.1" 21.554315ms Jul 05 23:28:13 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 757.954µs Jul 05 23:28:15 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 53.243µs Jul 05 23:28:15 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 38.615µs Jul 05 23:28:15 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/glm-4.7-flash/slots HTTP/1.1" 200 1402 "python-httpx/0.28.1" 17.09304ms Jul 05 23:28:15 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1370 "python-httpx/0.28.1" 698.895µs Jul 05 23:28:17 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 73.039µs Jul 05 23:28:17 BATTLESTA…
+Jul 06 10:49:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 38.723µs Jul 06 10:49:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 583.114µs Jul 06 10:49:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 478.891µs Jul 06 10:49:57 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 54.785µs Jul 06 10:49:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 40.347µs Jul 06 10:49:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 546.345µs Jul 06 10:49:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 460.632µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 47.992µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.137µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 532.434µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 491.23µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 49.233µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 51.448µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 516.464µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 480.676µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 49.765µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 36.82µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 526.592µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 477.448µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 57.128µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 41.028µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 869.319µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 478.049µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 60.245µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 36.7µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 524.178µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 466.725µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 55.455µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 37.862µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 535.289µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 461.518µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 55.786µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.928µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 540.208µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 459.345µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 50.566µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 34.826µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 558.326µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 451.614µs Jul 06 10:50:16 BATTLESTATION-REN llama-swap[68355]: [INFO] Request…
 ```
 
 _This report is generated by `orc bugreport` and is safe to share: config

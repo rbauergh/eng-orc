@@ -98,12 +98,64 @@ def gather_rows(svc, config: Config) -> tuple[list[Row], list[str]]:
         "GPU visibility (informational)")
 
     # A configured model whose GGUF is missing dies with an opaque
-    # "upstream command exited prematurely" at load time — catch it here.
+    # "upstream command exited prematurely" at load time — catch it here,
+    # and when a near-identical file exists, say so (quant-name drift).
     for model_id, path in _llama_swap_model_files():
-        row(f"model file: {model_id}", path.exists(),
-            str(path) if path.exists()
-            else f"MISSING {path} — download it or fix the -m filename in the llama-swap config")
+        if path.exists():
+            row(f"model file: {model_id}", True, str(path))
+            continue
+        similar = _similar_files(path)
+        if similar:
+            row(f"model file: {model_id}", False,
+                f"config wants {path.name} but you have {similar[0]} — "
+                f"re-copy the profile config + restart llama-swap")
+        else:
+            row(f"model file: {model_id}", False,
+                f"MISSING {path} — scripts/download_models.sh fetches it")
+
+    drift_ok, drift_detail = _profile_config_drift(config)
+    if drift_ok is not None:
+        row("llama-swap config sync", True if drift_ok else None, drift_detail)
     return rows, unlisted
+
+
+def _similar_files(path: Path) -> list[str]:
+    """GGUFs in the same directory that look like the wanted file modulo
+    quant-naming drift (UD- prefixes and case)."""
+    if not path.parent.is_dir():
+        return []
+
+    def normalize(name: str) -> str:
+        return re.sub(r"ud[-_]", "", name.lower())
+
+    target = normalize(path.name)
+    exact = [f.name for f in path.parent.glob("*.gguf")
+             if normalize(f.name) == target and f.name != path.name]
+    if exact:
+        return exact
+    prefix = path.name[:16].lower()
+    return [f.name for f in path.parent.glob("*.gguf")
+            if f.name.lower().startswith(prefix)][:2]
+
+
+def _profile_config_drift(config: Config,
+                          live_path: Path | None = None,
+                          profile_path: Path | None = None) -> tuple[bool | None, str]:
+    """Compare the LIVE llama-swap config against the repo profile it was
+    copied from. Drift is the recurring failure mode of 'the repo is fixed
+    but the box still runs the old config'. Warn, don't fail — the user may
+    have tuned the live copy deliberately."""
+    live_path = live_path or Path.home() / ".config" / "llama-swap" / "config.yaml"
+    profile_path = profile_path or (
+        Path(__file__).resolve().parents[2] / "server" / "profiles"
+        / config.models.profile / "llama-swap.yaml"
+    )
+    if not live_path.exists() or not profile_path.exists():
+        return None, ""
+    if live_path.read_bytes() == profile_path.read_bytes():
+        return True, f"matches server/profiles/{config.models.profile}"
+    return False, (f"DRIFTED from server/profiles/{config.models.profile} — "
+                   f"cp it over {live_path} and restart llama-swap (setup does both)")
 
 
 def _llama_swap_model_files(config_path: Path | None = None) -> list[tuple[str, Path]]:

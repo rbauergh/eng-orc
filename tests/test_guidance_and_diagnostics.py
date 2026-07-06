@@ -177,6 +177,32 @@ def test_prompt_gates_answers_by_option_number(config, monkeypatch):
     assert project.gates.get(other.id).status == "open"  # quit before it
 
 
+def test_missing_model_with_near_miss_name_is_identified(tmp_path):
+    from engorc.bugreport import _similar_files
+
+    wanted = tmp_path / "Nemotron-3-Nano-30B-A3B-UD-IQ4_NL.gguf"  # config's stale name
+    (tmp_path / "Nemotron-3-Nano-30B-A3B-IQ4_NL.gguf").write_bytes(b"gguf")  # what exists
+    similar = _similar_files(wanted)
+    assert similar == ["Nemotron-3-Nano-30B-A3B-IQ4_NL.gguf"]
+    assert _similar_files(tmp_path / "totally-unrelated.gguf") == []
+
+
+def test_profile_config_drift_detection(tmp_path, config):
+    from engorc.bugreport import _profile_config_drift
+
+    live = tmp_path / "live.yaml"
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("models: {}\n")
+    live.write_text("models: {}\n")
+    ok, _ = _profile_config_drift(config, live_path=live, profile_path=profile)
+    assert ok is True
+    live.write_text("models: {stale: true}\n")
+    ok, detail = _profile_config_drift(config, live_path=live, profile_path=profile)
+    assert ok is False and "DRIFTED" in detail
+    ok, _ = _profile_config_drift(config, live_path=tmp_path / "absent.yaml", profile_path=profile)
+    assert ok is None
+
+
 def test_llama_swap_model_file_parsing(tmp_path):
     config = tmp_path / "config.yaml"
     config.write_text(

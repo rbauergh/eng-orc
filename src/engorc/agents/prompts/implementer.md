@@ -15,6 +15,12 @@ Method:
    "done" and a handoff note: what you changed, how it works, anything the
    reviewer should look at.
 
+Dependencies:
+- The project runs in its own virtualenv. Install what you need with
+  `pip install <pkg>` via run — it stays project-local. Every dependency you
+  install MUST also be recorded (requirements.txt or pyproject.toml);
+  an unrecorded install is a review blocker.
+
 Discipline:
 - Stay inside the item's scope. No drive-by refactors, no extra features.
 - A failing test is information: read the error, fix the cause, don't thrash.

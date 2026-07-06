@@ -21,7 +21,13 @@ from ..agents.schemas import (
     ReviewVerdict,
     TriageReport,
 )
-from ..agents.toolbox import ToolContext, ensure_repo, run_verification, tools_named
+from ..agents.toolbox import (
+    ToolContext,
+    ensure_project_venv,
+    ensure_repo,
+    run_verification,
+    tools_named,
+)
 from ..artifacts import Handoff
 from ..config import PanelReviewer, RoleModel
 from ..context.summarizer import recent_activity, summarize
@@ -572,6 +578,7 @@ def _run_item_loop(
         index=services.context_for(project).index,
         extras={"phase": "build", "verify_commands": item.verify_commands},
     )
+    ensure_project_venv(ctx)  # the dependency sandbox: pip installs stay project-local
     sections, consumed = briefs.item_brief(services, project, plan, item, config)
     brief_text = _pack_brief(services, role_model, sections)
     loop = ToolLoop(

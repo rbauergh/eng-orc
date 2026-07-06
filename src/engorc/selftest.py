@@ -23,7 +23,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import Config, IndexConfig, MemoryConfig
+from .config import Config, IndexConfig, MemoryConfig, RunConfig
 from .llm.fake import FakeLLM, assistant_turns, brief_of, role_of, structured_reply
 from .obs.console import log
 from .orchestrator.scheduler import Scheduler
@@ -282,6 +282,9 @@ def _fresh_services(home: Path) -> Services:
         home=home,
         memory=MemoryConfig(backend="local"),
         index=IndexConfig(enabled=False),
+        # selftest must stay offline-capable and fast; venv creation has its
+        # own dedicated tests
+        run=RunConfig(project_venvs=False),
     )
     return Services.build(config, client=FakeLLM(DemoBrain()))
 

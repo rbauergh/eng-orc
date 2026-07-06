@@ -49,6 +49,14 @@ def gather_rows(svc, config: Config) -> tuple[list[Row], list[str]]:
         row(f"binary: {binary}", present if required else (present or None),
             "" if present else ("required" if required else "optional — better context if installed"))
 
+    try:
+        venv_ok = subprocess.run(["python3", "-m", "ensurepip", "--version"],
+                                 capture_output=True, timeout=15).returncode == 0
+    except Exception:
+        venv_ok = False
+    row("python3 venv support", venv_ok or None,
+        "project dependency sandboxes" if venv_ok else "apt install python3-venv")
+
     for module, why in (("langgraph", "orchestration"), ("llama_index.core", "code index"),
                         ("chromadb", "vector store"), ("letta_client", "letta memory")):
         try:

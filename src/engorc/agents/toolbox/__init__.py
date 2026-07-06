@@ -3,7 +3,7 @@ from .control import CONTROL_TOOLS
 from .fs import FS_TOOLS
 from .git import GIT_TOOLS, ensure_repo
 from .search import SEARCH_TOOLS
-from .shell import SHELL_TOOLS
+from .shell import SHELL_TOOLS, ensure_project_venv
 from .testing import TESTING_TOOLS, run_verification
 
 ALL_TOOLS: dict[str, Tool] = {
@@ -24,5 +24,6 @@ __all__ = [
     "ALL_TOOLS",
     "tools_named",
     "ensure_repo",
+    "ensure_project_venv",
     "run_verification",
 ]

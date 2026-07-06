@@ -113,6 +113,10 @@ class RunConfig(BaseModel):
     # Round cap for the interactive project-definition conversation (orc new -i);
     # at the cap the model finalizes the spec under recorded assumptions.
     intake_rounds: int = 10
+    # Each project workroom gets its own virtualenv (seeded with pip+pytest);
+    # agent commands and verification run inside it, so `pip install X` is
+    # project-local and can never touch orc's own environment.
+    project_venvs: bool = True
     max_tool_output_chars: int = 6000
     shell_timeout: float = 300.0
     verify_timeout: float = 600.0

@@ -35,15 +35,73 @@ def _denied(command: str) -> str | None:
     return None
 
 
-def _subprocess_env() -> dict:
-    """Commands must see the same python environment orc runs in: `python3`
-    resolves to the venv interpreter even when orc was invoked by absolute
-    path with no venv activated."""
+VENV_DIR = ".venv"
+
+
+def project_venv_bin(workroom: Path) -> Path | None:
+    bin_dir = workroom / VENV_DIR / "bin"
+    if (bin_dir / "python3").exists() or (bin_dir / "python").exists():
+        return bin_dir
+    return None
+
+
+def _seed_project_venv(python: Path) -> bool:
+    """pip + pytest into a fresh project venv (needs the network once)."""
+    try:
+        proc = subprocess.run(
+            [str(python), "-m", "pip", "install", "-q", "--upgrade", "pip", "pytest"],
+            capture_output=True, text=True, timeout=300,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def ensure_project_venv(ctx: ToolContext) -> Path | None:
+    """The project's dependency sandbox: agents `pip install` into it, and
+    verification runs against it, so nothing ever lands in orc's own env
+    (or trips PEP 668 on the system python)."""
+    if not ctx.config.run.project_venvs:
+        return None
+    existing = project_venv_bin(ctx.workroom)
+    if existing is not None:
+        return existing
+    import venv as _venv
+
+    from ...obs.console import log
+
+    try:
+        _venv.EnvBuilder(with_pip=True).create(str(ctx.workroom / VENV_DIR))
+    except Exception as exc:
+        log.warn(f"could not create the project venv ({exc}); commands fall back to orc's env")
+        return None
+    bin_dir = project_venv_bin(ctx.workroom)
+    if bin_dir is None:
+        return None
+    python = bin_dir / "python3" if (bin_dir / "python3").exists() else bin_dir / "python"
+    if _seed_project_venv(python):
+        log.info(f"project venv ready at {ctx.workroom / VENV_DIR} (pip + pytest seeded)")
+    else:
+        log.warn("project venv created but seeding pip/pytest failed (offline?) — "
+                 "agents can `pip install pytest` themselves once the network is back")
+    return bin_dir
+
+
+def _subprocess_env(ctx: ToolContext) -> dict:
+    """Agent commands run inside the PROJECT's venv when it exists: pip
+    installs stay project-local. Without one (disabled/failed), fall back to
+    orc's own interpreter dir so `python3 -m pytest` still resolves."""
     env = os.environ.copy()
-    bin_dir = str(Path(sys.executable).parent)
+    env.pop("VIRTUAL_ENV", None)
+    project_bin = project_venv_bin(ctx.workroom) if ctx.config.run.project_venvs else None
+    if project_bin is not None:
+        lead = str(project_bin)
+        env["VIRTUAL_ENV"] = str(project_bin.parent)
+    else:
+        lead = str(Path(sys.executable).parent)
     path = env.get("PATH", "")
-    if not path.startswith(bin_dir):
-        env["PATH"] = f"{bin_dir}{os.pathsep}{path}" if path else bin_dir
+    if not path.startswith(lead):
+        env["PATH"] = f"{lead}{os.pathsep}{path}" if path else lead
     return env
 
 
@@ -58,7 +116,7 @@ def run_command(ctx: ToolContext, command: str, timeout: float) -> ToolResult:
             capture_output=True,
             text=True,
             timeout=timeout,
-            env=_subprocess_env(),
+            env=_subprocess_env(ctx),
         )
     except subprocess.TimeoutExpired:
         return ToolResult(ok=False, output=f"timed out after {timeout:.0f}s: {command[:200]}")

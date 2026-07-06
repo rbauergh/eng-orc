@@ -4,7 +4,7 @@ os.environ.setdefault("ENGORC__LOG_LEVEL", "error")
 
 import pytest
 
-from engorc.config import Config, IndexConfig, MemoryConfig
+from engorc.config import Config, IndexConfig, MemoryConfig, RunConfig
 
 
 @pytest.fixture()
@@ -13,6 +13,9 @@ def config(tmp_path) -> Config:
         home=tmp_path / "home",
         memory=MemoryConfig(backend="local"),
         index=IndexConfig(enabled=False),
+        # real venv creation is exercised by its dedicated tests; everywhere
+        # else it would just add seconds and a network dependency
+        run=RunConfig(project_venvs=False),
     )
 
 

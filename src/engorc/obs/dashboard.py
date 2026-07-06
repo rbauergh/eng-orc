@@ -5,6 +5,11 @@ A pure reader: everything comes from the filesystem (journals, plans, gates)
 plus two cheap probes (llama-swap /running for resident/loading models,
 nvidia-smi for GPU load). Run it in a second terminal next to
 `orc run --watch`; it holds no state and can't interfere with the work.
+
+Flicker discipline: the live view runs on the alternate screen with fixed
+region geometry, auto-refresh off, and per-panel change keys — a panel is
+repainted only when its content actually changed, so an idle system draws
+nothing at all.
 """
 
 from __future__ import annotations
@@ -14,7 +19,8 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 
-from rich.console import Console, Group
+from rich.console import Console, Group, RenderableType
+from rich.layout import Layout
 from rich.live import Live
 from rich.markup import escape
 from rich.panel import Panel
@@ -167,58 +173,131 @@ def gather_snapshot(services) -> Snapshot:
     return snapshot
 
 
-def render(snapshot: Snapshot) -> Group:
-    resident = ", ".join(snapshot.resident) or "(nothing loaded)"
-    header_bits = [
-        f"profile [bold]{escape(snapshot.profile)}[/bold]",
-        ("[green]server ok[/green]" if snapshot.server_ok
-         else f"[red]server DOWN[/red] {escape(snapshot.server_url)}"),
+# ---------------------------------------------------------------------- panels
+# Each builder returns (change_key, renderable). The key is compared between
+# frames; the panel is only repainted when it differs.
+
+
+def _header_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    resident = ", ".join(s.resident) or "(nothing loaded)"
+    bits = [
+        f"profile [bold]{escape(s.profile)}[/bold]",
+        ("[green]server ok[/green]" if s.server_ok
+         else f"[red]server DOWN[/red] {escape(s.server_url)}"),
         f"resident: {escape(resident)}",
     ]
-    if snapshot.gpu:
-        header_bits.append(escape(snapshot.gpu))
-    header = Panel(" · ".join(header_bits), title="eng-orc", title_align="left")
+    if s.gpu:
+        bits.append(escape(s.gpu))
+    key = (s.profile, s.server_ok, tuple(s.resident), s.gpu)
+    return key, Panel(" · ".join(bits), title="eng-orc", title_align="left")
 
+
+def _projects_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    if not s.projects:
+        return ("empty",), Panel('no projects — orc new "<goal>"', title="projects", title_align="left")
     table = Table(expand=True, show_edge=False, pad_edge=False)
     for column in ("project", "pri", "phase", "state", "plan", "gates", "active"):
         table.add_column(column)
-    for row in snapshot.projects:
+    for row in s.projects:
         table.add_row(*(escape(cell) for cell in row))
-    projects_panel = Panel(
-        table if snapshot.projects else "no projects — orc new \"<goal>\"",
-        title="projects", title_align="left",
-    )
+    return tuple(s.projects), Panel(table, title="projects", title_align="left")
 
-    now_text = "\n".join(
-        f"[bold]{escape(line.slug)}[/bold] · {escape(line.text)}" for line in snapshot.now
+
+def _now_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    text = "\n".join(
+        f"[bold]{escape(line.slug)}[/bold] · {escape(line.text)}" for line in s.now
     ) or "[dim]idle — no attempt in flight[/dim]"
-    now_panel = Panel(now_text, title="working now", title_align="left")
+    key = tuple((line.slug, line.text) for line in s.now)
+    return key, Panel(text, title="working now", title_align="left")
 
-    activity_text = "\n".join(escape(line) for line in snapshot.activity) or "[dim](no activity yet)[/dim]"
-    activity_panel = Panel(activity_text, title="recent activity", title_align="left")
 
-    footer_bits = [f"projects live in {escape(snapshot.projects_dir)}"]
-    if snapshot.open_gates:
-        footer_bits.append(
-            f"[yellow]{snapshot.open_gates} question(s) waiting — orc inbox[/yellow]"
-        )
-    footer_bits.append(f"memory: {escape(shorten(snapshot.memory_backend, 60))}")
-    footer = Panel(" · ".join(footer_bits) + " · Ctrl-C exits", title_align="left")
+def _activity_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    text = "\n".join(escape(line) for line in s.activity) or "[dim](no activity yet)[/dim]"
+    return tuple(s.activity), Panel(text, title="recent activity", title_align="left")
 
-    return Group(header, projects_panel, now_panel, activity_panel, footer)
+
+def _footer_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    bits = [f"projects live in {escape(s.projects_dir)}"]
+    if s.open_gates:
+        bits.append(f"[yellow]{s.open_gates} question(s) waiting — orc inbox[/yellow]")
+    bits.append(f"memory: {escape(shorten(s.memory_backend, 50))}")
+    key = (s.projects_dir, s.open_gates, s.memory_backend)
+    return key, Panel(" · ".join(bits) + " · Ctrl-C exits", title_align="left")
+
+
+_REGIONS = {
+    "header": _header_panel,
+    "projects": _projects_panel,
+    "now": _now_panel,
+    "activity": _activity_panel,
+    "footer": _footer_panel,
+}
+
+
+def render(snapshot: Snapshot) -> Group:
+    """One-shot rendering (orc dashboard --once, tests, non-tty fallback)."""
+    return Group(*(builder(snapshot)[1] for builder in _REGIONS.values()))
+
+
+def _build_layout(snapshot: Snapshot) -> Layout:
+    layout = Layout()
+    layout.split_column(
+        Layout(name="header", size=3),
+        Layout(name="projects", size=_projects_size(snapshot)),
+        Layout(name="now", size=_now_size(snapshot)),
+        Layout(name="activity"),  # takes the remaining height
+        Layout(name="footer", size=3),
+    )
+    return layout
+
+
+def _projects_size(s: Snapshot) -> int:
+    return min(max(len(s.projects), 1), 10) + 3  # rows + header line + borders
+
+
+def _now_size(s: Snapshot) -> int:
+    return min(max(len(s.now), 1), 4) + 2
 
 
 def run_dashboard(services, interval: float = 2.0, once: bool = False,
                   console: Console | None = None) -> None:
     console = console or Console()
-    if once:
+    if once or not console.is_terminal:
         console.print(render(gather_snapshot(services)))
         return
+
+    snapshot = gather_snapshot(services)
+    layout = _build_layout(snapshot)
+    keys: dict[str, tuple] = {}
+    sizes = (_projects_size(snapshot), _now_size(snapshot))
+
+    def apply(s: Snapshot) -> bool:
+        nonlocal sizes
+        changed = False
+        new_sizes = (_projects_size(s), _now_size(s))
+        if new_sizes != sizes:  # geometry changes are rare (project count moved)
+            sizes = new_sizes
+            layout["projects"].size, layout["now"].size = new_sizes
+            keys.clear()  # force full repaint into the new geometry
+            changed = True
+        for name, builder in _REGIONS.items():
+            key, renderable = builder(s)
+            if keys.get(name) != key:
+                keys[name] = key
+                layout[name].update(renderable)
+                changed = True
+        return changed
+
+    apply(snapshot)
     try:
-        with Live(render(gather_snapshot(services)), console=console,
-                  refresh_per_second=4, screen=False) as live:
+        # Alternate screen + manual refresh: repaint happens only when a panel's
+        # content key changed — an idle dashboard is a perfectly still picture.
+        with Live(layout, console=console, screen=True, auto_refresh=False) as live:
+            live.refresh()
             while True:
                 time.sleep(max(0.5, interval))
-                live.update(render(gather_snapshot(services)))
+                if apply(gather_snapshot(services)):
+                    live.refresh()
     except KeyboardInterrupt:
-        console.print("dashboard closed — the orchestrator keeps running")
+        pass
+    console.print("dashboard closed — the orchestrator keeps running")

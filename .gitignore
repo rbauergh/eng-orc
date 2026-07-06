@@ -18,6 +18,7 @@ models/
 *.sqlite
 *.sqlite3
 *.db
+server/letta/.env
 
 # editors / OS
 .vscode/

@@ -29,7 +29,18 @@ orc doctor
 ```
 
 Re-run the installer any time — it is idempotent and skips finished work.
-Updating the code: `git pull && .venv/bin/pip install -e ".[dev]" && orc selftest`.
+
+**Updating after a `git pull` — always the same three commands:**
+
+```bash
+.venv/bin/pip install -e ".[dev]"   # new code
+orc sync                            # live server config + model settings ← repo profile,
+                                    # llama-swap restarted; your other tuning survives
+orc selftest                        # prove it
+```
+
+`orc doctor`'s "llama-swap config sync" row tells you whenever the live
+config has drifted from the repo profile; `orc sync` is always the fix.
 
 ## Daily driving
 

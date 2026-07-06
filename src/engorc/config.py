@@ -258,6 +258,38 @@ def reset_config_cache() -> None:
     get_config.cache_clear()
 
 
+def apply_profile_to_config(profile_yaml: Path, config_path: Path) -> list[str]:
+    """Merge a profile's orc-models.yaml into the user config: models and
+    review are owned by the profile (replaced); run keys are merged
+    individually so user tuning survives. Returns the keys applied."""
+    import yaml
+
+    profile = yaml.safe_load(profile_yaml.read_text(encoding="utf-8")) or {}
+    data = read_yaml(config_path, default={}) or {}
+    applied: list[str] = []
+    for key in ("models", "review"):
+        if key in profile:
+            data[key] = profile[key]
+            applied.append(key)
+    if "run" in profile:
+        merged_run = dict(data.get("run") or {})
+        merged_run.update(profile["run"])
+        data["run"] = merged_run
+        applied.append("run")
+    from .fsio import atomic_write_text
+
+    atomic_write_text(config_path, yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    return applied
+
+
+def repo_root() -> Path | None:
+    """The eng-orc checkout this (editable) install runs from, when it exists."""
+    candidate = Path(__file__).resolve().parents[2]
+    if (candidate / "server" / "profiles").is_dir():
+        return candidate
+    return None
+
+
 CONFIG_TEMPLATE = """\
 # eng-orc configuration. Environment overrides: ENGORC__SECTION__KEY=value
 # (e.g. ENGORC__SERVER__BASE_URL=http://127.0.0.1:9292/v1)

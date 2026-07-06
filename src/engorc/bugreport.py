@@ -107,8 +107,7 @@ def gather_rows(svc, config: Config) -> tuple[list[Row], list[str]]:
         similar = _similar_files(path)
         if similar:
             row(f"model file: {model_id}", False,
-                f"config wants {path.name} but you have {similar[0]} — "
-                f"re-copy the profile config + restart llama-swap")
+                f"config wants {path.name} but you have {similar[0]} — run `orc sync`")
         else:
             row(f"model file: {model_id}", False,
                 f"MISSING {path} — scripts/download_models.sh fetches it")
@@ -154,8 +153,8 @@ def _profile_config_drift(config: Config,
         return None, ""
     if live_path.read_bytes() == profile_path.read_bytes():
         return True, f"matches server/profiles/{config.models.profile}"
-    return False, (f"DRIFTED from server/profiles/{config.models.profile} — "
-                   f"cp it over {live_path} and restart llama-swap (setup does both)")
+    return False, (f"DRIFTED from server/profiles/{config.models.profile} — run `orc sync` "
+                   f"(re-copies the profile and restarts llama-swap)")
 
 
 def _llama_swap_model_files(config_path: Path | None = None) -> list[tuple[str, Path]]:
@@ -189,8 +188,8 @@ UNLISTED_NOTE = (
     "Aliases route correctly even when unlisted, so these usually work anyway.\n"
     "To make the listing complete (also needed for Letta model discovery), the\n"
     "llama-swap config must contain includeAliasesInList: true — the shipped\n"
-    "profiles do. Easiest fix: re-run scripts/setup_wsl.sh, which re-copies the\n"
-    "profile config and restarts llama-swap."
+    "profiles do. Fix: run `orc sync` (re-copies the profile config and\n"
+    "restarts llama-swap)."
 )
 
 

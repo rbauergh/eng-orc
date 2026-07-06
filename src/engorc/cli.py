@@ -71,6 +71,60 @@ def version() -> None:
 
 
 @app.command()
+def sync(
+    profile: str | None = typer.Option(None, help="profile to sync (default: the configured one)"),
+) -> None:
+    """Bring the live server + orc configs in line with the repo's profile.
+
+    Run this after every `git pull`: copies the profile's llama-swap config
+    into place, merges its model/review/run settings into ~/.eng-orc/config.yaml
+    (your other tuning survives), and restarts llama-swap.
+    """
+    import shutil as _shutil
+    import subprocess as _subprocess
+
+    from .config import apply_profile_to_config, repo_root
+
+    config = get_config()
+    root = repo_root()
+    if root is None:
+        log.error("cannot locate the eng-orc repo next to this install — re-run scripts/setup_wsl.sh")
+        raise typer.Exit(1)
+    name = profile or config.models.profile
+    profile_dir = root / "server" / "profiles" / name
+    if not profile_dir.is_dir():
+        available = ", ".join(sorted(p.name for p in (root / "server" / "profiles").iterdir()))
+        raise typer.BadParameter(f"unknown profile {name!r} (available: {available})")
+
+    swap_config = Path.home() / ".config" / "llama-swap" / "config.yaml"
+    ensure_dir(swap_config.parent)
+    _shutil.copyfile(profile_dir / "llama-swap.yaml", swap_config)
+    log.success(f"llama-swap config ← server/profiles/{name}")
+
+    if not config.config_path.exists():
+        init()
+    applied = apply_profile_to_config(profile_dir / "orc-models.yaml", config.config_path)
+    log.success(f"~/.eng-orc/config.yaml ← profile sections: {', '.join(applied)}")
+
+    restarted = False
+    try:
+        check = _subprocess.run(["systemctl", "--user", "cat", "llama-swap.service"],
+                                capture_output=True, timeout=15)
+        if check.returncode == 0:
+            restart = _subprocess.run(["systemctl", "--user", "restart", "llama-swap.service"],
+                                      capture_output=True, text=True, timeout=60)
+            restarted = restart.returncode == 0
+    except Exception:
+        pass
+    if restarted:
+        log.success("llama-swap restarted with the fresh config")
+    else:
+        log.warn("could not restart llama-swap via systemd — restart it yourself "
+                 "(scripts/start_stack.sh) so the new config loads")
+    log.info("verify with: orc doctor")
+
+
+@app.command()
 def new(
     goal: str = typer.Argument(..., help="the mission, in plain language"),
     title: str | None = typer.Option(None, help="short display title (default: first line of goal)"),

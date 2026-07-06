@@ -157,10 +157,8 @@ else
 fi
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) warn "add $BIN_DIR to your PATH" ;; esac
 
-# --- 6. llama-swap config for the chosen profile ---------------------------------------
+# --- 6. directories -------------------------------------------------------------------
 mkdir -p "$SWAP_CONFIG_DIR" "$MODELS_DIR"
-cp "$REPO_ROOT/server/profiles/$PROFILE/llama-swap.yaml" "$SWAP_CONFIG_DIR/config.yaml"
-log "llama-swap config installed for profile $PROFILE"
 
 # --- 7. python venv + orc -----------------------------------------------------------------
 VENV="$REPO_ROOT/.venv"
@@ -181,30 +179,9 @@ else
   log "skipping model downloads (--no-models)"
 fi
 
-# --- 9. orc home config -----------------------------------------------------------------------------
+# --- 9. orc home config + profile sync (config copy, merge, service restart) ---------------------
 "$ORC" init
-log "merging profile model settings into ~/.eng-orc/config.yaml"
-"$VENV/bin/python" - "$REPO_ROOT/server/profiles/$PROFILE/orc-models.yaml" <<'PYEOF'
-import sys
-from pathlib import Path
-import yaml
-
-from engorc.config import load_config
-
-profile_path = Path(sys.argv[1])
-config_path = load_config().config_path
-data = yaml.safe_load(config_path.read_text()) or {}
-profile = yaml.safe_load(profile_path.read_text())
-for key in ("models", "review"):
-    if key in profile:
-        data[key] = profile[key]
-if "run" in profile:  # profile only sets specific run keys; user tuning survives
-    merged_run = dict(data.get("run") or {})
-    merged_run.update(profile["run"])
-    data["run"] = merged_run
-config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
-print(f"models/review/run sections set from {profile_path.name}")
-PYEOF
+"$ORC" sync --profile "$PROFILE"
 
 # --- 10. systemd user service for llama-swap ------------------------------------------------------------
 if [ "$DO_SERVICES" = 1 ] && command -v systemctl >/dev/null 2>&1 \

@@ -67,11 +67,15 @@ def test_panel_runs_each_seat_with_its_lens_and_model(tmp_path, item):
         system = messages[0]["content"]
         lens = "adversarial" if "ADVERSARIAL" in system else "correctness"
         seen.append((role_model.model, lens))
+        # reviewers must see that the harness already ran verification
+        assert "Verification results" in messages[-1]["content"]
+        assert "[PASS] python3 -m pytest" in messages[-1]["content"]
         return _approve()
 
     services = _services_with_brain(config, brain)
     project = Registry(config).create("mission", title="M")
-    results = run_review_panel(services, project, item, diff="+ hello")
+    results = run_review_panel(services, project, item, diff="+ hello",
+                               verify_summary="[PASS] python3 -m pytest -q")
 
     assert seen == [("coder", "correctness"), ("other-weights", "adversarial")]
     approved, blockers = panel_outcome(results)

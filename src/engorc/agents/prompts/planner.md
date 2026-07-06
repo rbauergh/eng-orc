@@ -12,6 +12,9 @@ Rules:
 - Each item needs acceptance criteria that are checkable by looking at the
   work, and verify_commands that exit 0 when the item is done (use the
   project's real test command; an empty list means the project default).
+  Runtime behaviors ("X installs", "the command runs") belong in
+  verify_commands, NOT in acceptance prose — reviewers judge code plus the
+  verification results, and cannot execute anything themselves.
 - First items build the skeleton (project scaffolding, core types); later
   items add behavior; final items integrate and polish docs.
 - TDD is the default for behavior: any item whose acceptance describes what

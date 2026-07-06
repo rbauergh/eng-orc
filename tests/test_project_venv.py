@@ -56,3 +56,17 @@ def test_commands_actually_run_inside_the_created_venv(tmp_path, monkeypatch):
     assert str(ctx.workroom / ".venv") in result.output
     # idempotent: a second ensure reuses the same venv
     assert ensure_project_venv(ctx) == bin_dir
+
+
+def test_attached_non_python_repo_gets_no_venv_clutter(tmp_path, monkeypatch):
+    import engorc.agents.toolbox.shell as shell_module
+
+    monkeypatch.setattr(shell_module, "_seed_project_venv", lambda python: True)
+    ctx = _ctx(_venv_config(tmp_path, enabled=True))
+    (ctx.workroom / "package.json").write_text("{}")
+    (ctx.workroom / "index.js").write_text("console.log('hi')\n")
+    assert ensure_project_venv(ctx) is None
+    assert not (ctx.workroom / ".venv").exists()
+    # ...until Python actually shows up
+    (ctx.workroom / "helper.py").write_text("x = 1\n")
+    assert ensure_project_venv(ctx) is not None

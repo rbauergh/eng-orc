@@ -141,7 +141,12 @@ class StructuredCaller:
             self.usage += result.usage
             last_text = result.text
             try:
-                parsed = self._parse(role_model, schema, result.text)
+                # a reasoning model that streamed EVERYTHING into the reasoning
+                # channel leaves content empty — the answer often lives there
+                candidate = result.text
+                if not strip_thinking(candidate).strip() and result.reasoning.strip():
+                    candidate = result.reasoning
+                parsed = self._parse(role_model, schema, candidate)
                 self._journal(schema, ok=True, rounds=round_no + 1, usage=result.usage)
                 return parsed
             except (json.JSONDecodeError, ValidationError) as exc:

@@ -178,8 +178,13 @@ class ToolLoop:
                 return self._finalize("error", f"LLM call failed: {exc}", turns, usage_total, touched)
             usage_total += response.usage
 
+            raw_reply = response.text
+            if not strip_thinking(raw_reply).strip() and response.reasoning.strip():
+                # the model put its whole reply in the reasoning channel —
+                # the ACTION line is usually in there
+                raw_reply = response.reasoning
             try:
-                action = parse_action(response.text)
+                action = parse_action(raw_reply)
                 consecutive_format_errors = 0
             except FormatError as exc:
                 consecutive_format_errors += 1

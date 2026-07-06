@@ -435,7 +435,7 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
         item = by_id.get(entry.item_id)
         if item is None:
             continue
-        marker = f"triage#{_triage_round(item) + 1}: {shorten(entry.diagnosis, 200)}"
+        marker = f"triage#{_triage_round(item) + 1}: {shorten(entry.diagnosis, 400)}"
         log.agent("triage", f"{entry.action} '{shorten(item.title, 50)}' — {shorten(entry.diagnosis, 90)}")
         project.journal.append(Kind.DECISION, actor="triage", item=item.id,
                                title=f"triage: {entry.action}",
@@ -649,11 +649,12 @@ def _pack_brief(services: Services, role_model: RoleModel, sections: list[Sectio
     return packed.text
 
 
-def _review_sections(project: Project, item: WorkItem, diff: str) -> list[Section]:
+def _review_sections(project: Project, item: WorkItem, diff: str,
+                     verify_summary: str = "") -> list[Section]:
     from ..agents.toolbox.git import tracked_files
 
     files = tracked_files(project.workroom)
-    return [
+    sections = [
         Section(name="Work item", text=briefs.item_task_text(item), priority=1),
         Section(name="Diff under review", text=diff or "(no diff captured)", priority=1, truncate="middle"),
         Section(
@@ -667,6 +668,14 @@ def _review_sections(project: Project, item: WorkItem, diff: str) -> list[Sectio
             priority=4,
         ),
     ]
+    if verify_summary:
+        sections.insert(2, Section(
+            name=("Verification results — the harness ALREADY RAN these commands; "
+                  "runtime acceptance criteria are settled by them"),
+            text=verify_summary,
+            priority=2,
+        ))
+    return sections
 
 
 def _review_one_seat(
@@ -677,6 +686,7 @@ def _review_one_seat(
     seat: PanelReviewer,
     artifact_name: str,
     stage: str = "code",
+    verify_summary: str = "",
 ) -> tuple[str, ReviewVerdict] | None:
     """One reviewer, one verdict: journaled, narrated, archived. Returns
     (model, verdict) or None when the seat is unavailable — a dead reviewer
@@ -708,7 +718,7 @@ def _review_one_seat(
             role_model,
             ReviewVerdict,
             system,
-            _review_sections(project, item, diff),
+            _review_sections(project, item, diff, verify_summary),
         )
     except Exception as exc:
         project.journal.append(Kind.ERROR, actor=actor, item=item.id,
@@ -740,7 +750,8 @@ def _review_one_seat(
 
 
 def run_review_panel(
-    services: Services, project: Project, item: WorkItem, diff: str
+    services: Services, project: Project, item: WorkItem, diff: str,
+    verify_summary: str = "",
 ) -> list[tuple[PanelReviewer, str, ReviewVerdict]]:
     """Each panelist reviews independently: distinct weights and lenses catch
     failure modes a single (self-preferring) model misses. A panelist whose
@@ -753,6 +764,7 @@ def run_review_panel(
         outcome = _review_one_seat(
             services, project, item, diff, seat,
             artifact_name=f"review-{seat_no}-{seat.lens}.md",
+            verify_summary=verify_summary,
         )
         if outcome is not None:
             results.append((seat, outcome[0], outcome[1]))
@@ -870,14 +882,16 @@ def phase_build(services: Services, project: Project) -> str:
                 return note
 
         if exhausted and not project.gates.open_gates():
+            # this question is a human-facing artifact: the diagnosis travels
+            # WHOLE — a truncated diagnosis is homework, not information
             lines = []
             for stuck in exhausted[:3]:
                 last = stuck.last_attempt()
                 diagnosis = next((n for n in reversed(stuck.notes) if n.startswith("triage#")), "")
-                lines.append(
-                    f"'{stuck.title}': {shorten((last.summary if last else ''), 100)}"
-                    + (f" | {diagnosis}" if diagnosis else "")
-                )
+                entry = f"'{stuck.title}': {shorten((last.summary if last else ''), 200)}"
+                if diagnosis:
+                    entry += f"\n  {shorten(diagnosis, 600)}"
+                lines.append(entry)
             project.gates.open(
                 question=(
                     "Triage could not unstick these items and I need direction "
@@ -955,7 +969,8 @@ def phase_build(services: Services, project: Project) -> str:
         return f"implementer produced no changes on '{shorten(item.title, 50)}'; retrying"
 
     if config.run.review_required:
-        results = run_review_panel(services, project, item, truncate_middle(diff, 24000))
+        results = run_review_panel(services, project, item, truncate_middle(diff, 24000),
+                                   verify_summary=report.summary())
         if not results:
             project.journal.append(
                 Kind.ERROR, actor="reviewer", item=item.id,

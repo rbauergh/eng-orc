@@ -94,8 +94,14 @@ class SwapServer:
         field names vary across llama-server versions and may be nested."""
         decoded = prompt = 0
 
-        def scan(node: dict) -> None:
+        def scan(node) -> None:
             nonlocal decoded, prompt
+            if isinstance(node, list):  # e.g. next_token is a LIST of objects
+                for entry in node:
+                    scan(entry)
+                return
+            if not isinstance(node, dict):
+                return
             for key, value in node.items():
                 if isinstance(value, (int, float)) and not isinstance(value, bool):
                     lowered = key.lower()
@@ -103,7 +109,7 @@ class SwapServer:
                         decoded = max(decoded, int(value))
                     elif lowered in cls._PROMPT_KEYS:
                         prompt = max(prompt, int(value))
-                elif isinstance(value, dict):
+                elif isinstance(value, (dict, list)):
                     scan(value)
 
         scan(slot)

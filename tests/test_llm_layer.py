@@ -88,6 +88,28 @@ def test_structured_caller_gives_up_cleanly():
         caller.call(RoleModel(model="m"), Verdict, [{"role": "user", "content": "judge"}], repair_rounds=1)
 
 
+def test_structured_answer_recovered_from_reasoning_channel():
+    """Regression: GLM/gpt-oss sometimes put the ENTIRE reply in
+    reasoning_content, leaving content empty — the seat failed with
+    'Expecting value: line 1 column 1' instead of reading the answer."""
+    client = FakeLLM(lambda *a: ("", '{"reasoning": "in the wrong channel", "ok": true}'))
+    caller = StructuredCaller(client)
+    result = caller.call(RoleModel(model="m", thinking=True), Verdict,
+                         [{"role": "user", "content": "judge"}])
+    assert result.ok is True
+
+
+def test_tool_loop_reply_recovered_from_reasoning_channel():
+    from engorc.agents.runtime import parse_action
+    from engorc.llm.structured import strip_thinking
+
+    # mirror of the runtime fallback: empty content, ACTION in reasoning
+    text, reasoning = "", 'thinking aloud…\n\nACTION: finish {"status": "done"}\n```payload\nok\n```'
+    raw = text if strip_thinking(text).strip() else reasoning
+    action = parse_action(raw)
+    assert action.tool == "finish" and action.args == {"status": "done"}
+
+
 def test_packer_respects_budget_and_priorities():
     packer = ContextPacker(context_window=800, reserve_output=100, overhead=0)
     sections = [

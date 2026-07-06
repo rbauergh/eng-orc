@@ -49,7 +49,9 @@ class FakeLLM:
         stream_cb=None,
         extra_body: dict | None = None,
     ) -> LLMResult:
-        text = self.brain(messages, response_format, role_model)
+        reply = self.brain(messages, response_format, role_model)
+        # a brain may return (text, reasoning) to simulate reasoning-channel models
+        text, reasoning = reply if isinstance(reply, tuple) else (reply, "")
         self.calls.append(
             {
                 "model": role_model.model,
@@ -62,6 +64,7 @@ class FakeLLM:
         prompt_tokens = sum(approx_tokens(m.get("content", "")) for m in messages)
         return LLMResult(
             text=text,
+            reasoning=reasoning,
             model=role_model.model,
             usage=LLMUsage(prompt_tokens=prompt_tokens, completion_tokens=approx_tokens(text)),
             finish_reason="stop",

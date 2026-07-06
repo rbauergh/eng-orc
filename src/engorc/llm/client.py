@@ -53,6 +53,10 @@ class LLMResult:
     usage: LLMUsage = field(default_factory=LLMUsage)
     finish_reason: str = ""
     elapsed: float = 0.0
+    # llama.cpp parses reasoning-model output into a separate channel; some
+    # models (gpt-oss, GLM) occasionally put EVERYTHING there, leaving content
+    # empty — callers fall back to this when text is blank
+    reasoning: str = ""
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -144,9 +148,11 @@ class LLMClient:
         resp = self._post_chat(payload)
         data = resp.json()
         choice = (data.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
         usage = data.get("usage") or {}
         return LLMResult(
-            text=(choice.get("message") or {}).get("content") or "",
+            text=message.get("content") or "",
+            reasoning=message.get("reasoning_content") or "",
             model=data.get("model", payload["model"]),
             usage=LLMUsage(
                 prompt_tokens=usage.get("prompt_tokens", 0),
@@ -160,6 +166,7 @@ class LLMClient:
         body["stream"] = True
         body["stream_options"] = {"include_usage": True}
         chunks: list[str] = []
+        reasoning_chunks: list[str] = []
         usage = LLMUsage()
         finish_reason = ""
         model = payload["model"]
@@ -184,13 +191,18 @@ class LLMClient:
                     )
                 for choice in event.get("choices", []):
                     model = event.get("model", model)
-                    delta = (choice.get("delta") or {}).get("content")
+                    delta_obj = choice.get("delta") or {}
+                    delta = delta_obj.get("content")
                     if delta:
                         chunks.append(delta)
                         stream_cb(delta)
+                    reasoning_delta = delta_obj.get("reasoning_content")
+                    if reasoning_delta:
+                        reasoning_chunks.append(reasoning_delta)
                     if choice.get("finish_reason"):
                         finish_reason = choice["finish_reason"]
-        return LLMResult(text="".join(chunks), model=model, usage=usage, finish_reason=finish_reason)
+        return LLMResult(text="".join(chunks), reasoning="".join(reasoning_chunks),
+                         model=model, usage=usage, finish_reason=finish_reason)
 
     def _post_chat(self, payload: dict) -> httpx.Response:
         try:

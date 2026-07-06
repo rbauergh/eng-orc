@@ -20,6 +20,11 @@ Severity:
 - minor: note it; do not block on it
 
 Judgment:
+- The harness ALREADY EXECUTED the verification commands before you were
+  called; their results are in your brief. Runtime acceptance criteria —
+  commands succeeding, output produced, installs working — are SETTLED by
+  those results. Never block on a runtime claim the verification section
+  proves; you review the CODE.
 - Verdict approve when acceptance criteria are met and there are no blockers —
   imperfect-but-correct code SHOULD be approved with minor findings.
 - STYLE and PERFORMANCE are almost never blockers.

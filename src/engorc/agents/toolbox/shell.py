@@ -57,6 +57,21 @@ def _seed_project_venv(python: Path) -> bool:
         return False
 
 
+_FOREIGN_MARKERS = ("package.json", "Cargo.toml", "go.mod", "pom.xml", "build.gradle")
+
+
+def _clearly_not_python(workroom: Path) -> bool:
+    """Skip venv clutter in attached non-Python repos: another ecosystem's
+    manifest present and not a single .py file. Greenfield (no files at all)
+    still gets a venv — the first Python file may be minutes away."""
+    if not any((workroom / marker).exists() for marker in _FOREIGN_MARKERS):
+        return False
+    for path in workroom.rglob("*.py"):
+        if ".venv" not in path.parts:
+            return False
+    return True
+
+
 def ensure_project_venv(ctx: ToolContext) -> Path | None:
     """The project's dependency sandbox: agents `pip install` into it, and
     verification runs against it, so nothing ever lands in orc's own env
@@ -66,6 +81,8 @@ def ensure_project_venv(ctx: ToolContext) -> Path | None:
     existing = project_venv_bin(ctx.workroom)
     if existing is not None:
         return existing
+    if _clearly_not_python(ctx.workroom):
+        return None
     import venv as _venv
 
     from ...obs.console import log

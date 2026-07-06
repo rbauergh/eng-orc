@@ -107,3 +107,5 @@ networkingMode, remember mirrored mode has VPN/Docker quirks.
 2. `orc doctor` — environment.
 3. `orc chat utility "ping"` then `orc chat coder "ping"` — serving path.
 4. The journal never lies: `~/.eng-orc/projects/<slug>/journal/*.jsonl`.
+5. Getting details to whoever is helping: `orc bugreport --push` (sanitized
+   report, committed and pushed as one file — see docs/OPERATIONS.md).

@@ -93,7 +93,7 @@ class Scheduler:
                 result = self.step(slug)
                 if result is not None:
                     stepped_slug, note = result
-                    log.info(f"[bold]{stepped_slug}[/bold] · {note}")
+                    log.step(stepped_slug, note)
                     steps += 1
                     if max_steps is not None and steps >= max_steps:
                         log.info(f"stopped after {steps} step(s) (--max-steps)")

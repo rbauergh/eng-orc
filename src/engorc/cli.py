@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
@@ -157,7 +158,7 @@ def status(project: str | None = typer.Argument(None)) -> None:
             open_gates = len(proj.gates.open_gates())
             state = meta.state + (f" ({meta.state_reason})" if meta.state_reason and meta.state != "active" else "")
             table.add_row(
-                meta.slug, str(meta.priority), meta.phase, shorten(state, 40), plan_str,
+                escape(meta.slug), str(meta.priority), meta.phase, escape(shorten(state, 40)), plan_str,
                 str(open_gates) if open_gates else "-", human_age(meta.last_active),
                 str(meta.counters.get("steps", 0)),
             )
@@ -166,9 +167,9 @@ def status(project: str | None = typer.Argument(None)) -> None:
 
     proj = svc.registry.get(project)
     meta = proj.meta
-    _console().print(f"[bold]{meta.title}[/bold]  ({meta.slug})")
+    _console().print(f"[bold]{escape(meta.title)}[/bold]  ({escape(meta.slug)})")
     _console().print(f"phase [cyan]{meta.phase}[/cyan] · state [cyan]{meta.state}[/cyan] "
-                     f"{('· ' + meta.state_reason) if meta.state_reason else ''}")
+                     f"{escape('· ' + meta.state_reason) if meta.state_reason else ''}")
     plan = proj.load_plan()
     if plan.items:
         table = Table(title="plan")
@@ -176,16 +177,16 @@ def status(project: str | None = typer.Argument(None)) -> None:
             table.add_column(column)
         for item in plan.items:
             table.add_row(
-                item.id[-6:], shorten(item.title, 50), item.kind, item.status,
+                item.id[-6:], escape(shorten(item.title, 50)), item.kind, item.status,
                 str(len(item.attempts)), str(len(item.depends_on)) if item.depends_on else "-",
             )
         _console().print(table)
     for gate in proj.gates.open_gates():
-        _console().print(f"[yellow]open question[/yellow] [{gate.id}] {gate.question}")
+        _console().print(f"[yellow]open question[/yellow] [{escape(gate.id)}] {escape(gate.question)}")
     from .context.summarizer import recent_activity
 
     _console().print("\n[bold]recent activity[/bold]")
-    _console().print(recent_activity(proj.journal, 15))
+    _console().print(recent_activity(proj.journal, 15), markup=False)
 
 
 def _all_gates(svc) -> list[tuple[Project, Gate]]:
@@ -204,14 +205,13 @@ def inbox() -> None:
         log.success("inbox zero — nothing is waiting on you")
         return
     for proj, gate in pairs:
-        _console().print(
-            f"[bold]{gate.id}[/bold]  [{proj.root.name} · {gate.from_role} · {human_age(gate.ts)} ago]"
-        )
-        _console().print(f"  Q: {gate.question}")
+        origin = f"[{proj.root.name} · {gate.from_role} · {human_age(gate.ts)} ago]"
+        _console().print(f"[bold]{escape(gate.id)}[/bold]  {escape(origin)}")
+        _console().print(f"  Q: {escape(gate.question)}")
         if gate.context:
-            _console().print(f"  [dim]context: {shorten(gate.context, 160)}[/dim]")
+            _console().print(f"  [dim]context: {escape(shorten(gate.context, 160))}[/dim]")
         if gate.options:
-            _console().print(f"  options: {' | '.join(gate.options)}")
+            _console().print(f"  options: {escape(' | '.join(gate.options))}")
     _console().print("\nanswer with: orc answer <gate-id> \"your answer\"")
 
 
@@ -237,7 +237,7 @@ def report(project: str) -> None:
     proj = services().registry.get(project)
     text = proj.artifacts.read("report.md")
     if text:
-        _console().print(text)
+        _console().print(text, markup=False)
     else:
         log.info("no final report yet — showing status instead")
         status(project)
@@ -277,8 +277,9 @@ def memory_search(query: str, k: int = typer.Option(5), kind: str | None = typer
         return
     for hit in hits:
         item = hit.item
-        _console().print(f"[bold]{item.title}[/bold]  [{item.kind} · {item.project or 'global'} · {hit.backend}]")
-        _console().print(f"  {shorten(item.body, 300)}")
+        origin = f"[{item.kind} · {item.project or 'global'} · {hit.backend}]"
+        _console().print(f"[bold]{escape(item.title)}[/bold]  {escape(origin)}")
+        _console().print(f"  {escape(shorten(item.body, 300))}")
 
 
 @memory_app.command("add")
@@ -323,7 +324,7 @@ def models(unload: bool = typer.Option(False, help="unload whatever is resident 
     from .llm.catalog import chat_model_roles
 
     for name, role_model in chat_model_roles(svc.config).items():
-        table.add_row(name, role_model.model, str(role_model.context_window),
+        table.add_row(escape(name), escape(role_model.model), str(role_model.context_window),
                       str(role_model.max_output_tokens), "yes" if role_model.thinking else "no")
     table.add_row("embedder", svc.config.models.embedder.model, "—", "—", "—")
     _console().print(table)
@@ -370,89 +371,47 @@ def selftest(
 @app.command()
 def doctor() -> None:
     """Check every dependency of a working installation."""
-    import shutil as _shutil
+    from .bugreport import UNLISTED_NOTE, gather_rows
 
-    config = get_config()
+    rows, unlisted = gather_rows(services(), get_config())
     table = Table(title="orc doctor")
     for column in ("check", "status", "detail"):
         table.add_column(column)
-
-    def row(name: str, ok: bool | None, detail: str = "") -> None:
-        mark = {True: "[green]ok[/green]", False: "[red]FAIL[/red]", None: "[yellow]warn[/yellow]"}[ok]
-        table.add_row(name, mark, shorten(detail, 90))
-
-    row("home writable", config.home.exists() or config.home.parent.exists(), str(config.home))
-    row("config file", config.config_path.exists(), str(config.config_path)
-        if config.config_path.exists() else "run `orc init`")
-
-    for binary, required in (("git", True), ("rg", False), ("ctags", False), ("bash", True)):
-        present = _shutil.which(binary) is not None
-        row(f"binary: {binary}", present if required else (present or None),
-            "" if present else ("required" if required else "optional — better context if installed"))
-
-    for module, why in (("langgraph", "orchestration"), ("llama_index.core", "code index"),
-                        ("chromadb", "vector store"), ("letta_client", "letta memory")):
-        try:
-            __import__(module)
-            row(f"python: {module}", True, why)
-        except ImportError as exc:
-            row(f"python: {module}", None, f"{why} — {exc}")
-
-    svc = services()
-    server_up = svc.client.health()
-    row("llm server", server_up, config.server.base_url)
-    unlisted: list[str] = []
-    if server_up:
-        from .llm.catalog import chat_model_roles
-
-        served = set(svc.client.model_ids()) | svc.swap.known_model_names()
-
-        def model_row(label: str, name: str) -> None:
-            # An incomplete listing is a warning, not a failure: llama-swap
-            # routes aliases correctly even when it doesn't list them.
-            if name in served:
-                row(label, True, name)
-            else:
-                unlisted.append(f"{label} → {name}")
-                row(label, None, f"{name} — not in the server's listing (note below)")
-
-        for name, role_model in chat_model_roles(config).items():
-            model_row(f"model role: {name}", role_model.model)
-        for seat in config.review.panel:
-            try:
-                model_row(f"review seat: {seat.lens}", config.models.for_role(seat.model_role).model)
-            except KeyError:
-                row(f"review seat: {seat.lens}", False, f"unknown model role {seat.model_role!r}")
-        for fallback in config.run.coder_fallbacks:
-            try:
-                model_row(f"coder fallback: {fallback}", config.models.for_role(fallback).model)
-            except KeyError:
-                row(f"coder fallback: {fallback}", False, "unknown model role")
-        try:
-            dim = len(svc.client.embeddings(["ping"], model=config.models.embedder.model)[0])
-            row("embeddings", True, f"{config.models.embedder.model} (dim {dim})")
-        except Exception as exc:
-            row("embeddings", None, str(exc))
-        row("swap control", svc.swap.health(), config.server.control_url)
-
-    ok_memory, detail = svc.memory.health()
-    row("memory", ok_memory, detail)
-
-    nvidia = _shutil.which("nvidia-smi")
-    row("nvidia-smi", (nvidia is not None) or None, "GPU visibility (informational)")
-
+    marks = {True: "[green]ok[/green]", False: "[red]FAIL[/red]", None: "[yellow]warn[/yellow]"}
+    for name, ok, detail in rows:
+        table.add_row(escape(name), marks[ok], escape(shorten(detail, 90)))
     _console().print(table)
     if unlisted:
         log.warn("configured names missing from the server's model listing:")
         for entry in unlisted:
             log.info(f"  · {entry}")
-        log.info(
-            "Aliases route correctly even when unlisted, so these usually work anyway.\n"
-            "To make the listing complete (also needed for Letta model discovery), the\n"
-            "llama-swap config must contain includeAliasesInList: true — the shipped\n"
-            "profiles do. Easiest fix: re-run scripts/setup_wsl.sh, which re-copies the\n"
-            "profile config and restarts llama-swap."
-        )
+        log.info(UNLISTED_NOTE)
+
+
+@app.command()
+def bugreport(
+    output: Path = typer.Option(Path("orc-report.md"), help="where to write the report"),
+    push: bool = typer.Option(False, "--push",
+                              help="git add+commit+push the report from its directory"),
+) -> None:
+    """Write a sanitized diagnostics report to share (secrets redacted).
+
+    The intended loop for remote debugging: run `orc bugreport --push` in the
+    eng-orc repo checkout; whoever is helping pulls and reads orc-report.md.
+    """
+    from .bugreport import build_report, commit_and_push
+
+    text = build_report(services(), get_config())
+    output = output.resolve()
+    output.write_text(text, encoding="utf-8")
+    log.success(f"wrote {output} ({len(text.splitlines())} lines, secrets redacted)")
+    if push:
+        ok, message = commit_and_push(output)
+        (log.success if ok else log.error)(message)
+        if not ok:
+            raise typer.Exit(1)
+    else:
+        log.info("share it with: orc bugreport --push   (commits and pushes just this file)")
 
 
 def main() -> None:

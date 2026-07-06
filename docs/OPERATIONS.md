@@ -75,6 +75,20 @@ regardless (writes queue; `orc memory sync` reconciles). After the first
 successful pull, pin `LETTA_TAG` in `server/letta/.env` — the self-hosted
 image is maintenance-mode upstream and `latest` has broken before.
 
+## Sending diagnostics back (remote debugging loop)
+
+When something misbehaves on this machine and the person debugging works
+elsewhere:
+
+```bash
+orc bugreport --push
+```
+
+writes `orc-report.md` — doctor results, versions, config with secrets
+redacted, recent per-project journal errors, and the llama-swap log tail —
+then commits and pushes **just that file** from the current repo checkout.
+The other side pulls and reads. Without `--push` it only writes the file.
+
 ## Resuming after weeks away
 
 Nothing special: `orc status` to see where things stand, `orc run`. Briefs

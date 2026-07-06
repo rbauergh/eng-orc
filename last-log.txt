@@ -1,0 +1,64 @@
+(.venv) rbauer@BATTLESTATION-REN:~/eng-orc$ orc chat utility 'say hi'
+Hi there! 👋 How's it going? How can I help you today?
+╭──────────────────────────────────────────────────── Traceback (most recent call last) ────────────────────────────────────────────────────╮
+│ /home/rbauer/eng-orc/src/engorc/cli.py:350 in chat                                                                                        │
+│                                                                                                                                           │
+│   347 │   result = svc.client.chat(role_model, [{"role": "user", "content": message}],                                                    │
+│   348 │   │   │   │   │   │   │    stream_cb=lambda chunk: print(chunk, end="", flush=True))                                              │
+│   349 │   print()                                                                                                                         │
+│ ❱ 350 │   log.info(f"[{result.model}] {result.usage.prompt_tokens}+{result.usage.completion_tokens} tokens "                              │
+│   351 │   │   │    f"in {result.elapsed:.1f}s")                                                                                           │
+│   352                                                                                                                                     │
+│   353                                                                                                                                     │
+│                                                                                                                                           │
+│ /home/rbauer/eng-orc/src/engorc/obs/console.py:31 in info                                                                                 │
+│                                                                                                                                           │
+│   28 │                                                                                                                                    │
+│   29 │   def info(self, message: str) -> None:                                                                                            │
+│   30 │   │   if self.level <= 20:                                                                                                         │
+│ ❱ 31 │   │   │   self.console.print(message)                                                                                              │
+│   32 │                                                                                                                                    │
+│   33 │   def success(self, message: str) -> None:                                                                                         │
+│   34 │   │   if self.level <= 20:                                                                                                         │
+│                                                                                                                                           │
+│ /home/rbauer/eng-orc/.venv/lib/python3.12/site-packages/rich/console.py:1705 in print                                                     │
+│                                                                                                                                           │
+│   1702 │   │   │   crop = False                                                                                                           │
+│   1703 │   │   render_hooks = self._render_hooks[:]                                                                                       │
+│   1704 │   │   with self:                                                                                                                 │
+│ ❱ 1705 │   │   │   renderables = self._collect_renderables(                                                                               │
+│   1706 │   │   │   │   objects,                                                                                                           │
+│   1707 │   │   │   │   sep,                                                                                                               │
+│   1708 │   │   │   │   end,                                                                                                               │
+│                                                                                                                                           │
+│ /home/rbauer/eng-orc/.venv/lib/python3.12/site-packages/rich/console.py:1560 in _collect_renderables                                      │
+│                                                                                                                                           │
+│   1557 │   │   │   renderable = rich_cast(renderable)                                                                                     │
+│   1558 │   │   │   if isinstance(renderable, str):                                                                                        │
+│   1559 │   │   │   │   append_text(                                                                                                       │
+│ ❱ 1560 │   │   │   │   │   self.render_str(                                                                                               │
+│   1561 │   │   │   │   │   │   renderable,                                                                                                │
+│   1562 │   │   │   │   │   │   emoji=emoji,                                                                                               │
+│   1563 │   │   │   │   │   │   markup=markup,                                                                                             │
+│                                                                                                                                           │
+│ /home/rbauer/eng-orc/.venv/lib/python3.12/site-packages/rich/console.py:1442 in render_str                                                │
+│                                                                                                                                           │
+│   1439 │   │   highlight_enabled = highlight or (highlight is None and self._highlight)                                                   │
+│   1440 │   │                                                                                                                              │
+│   1441 │   │   if markup_enabled:                                                                                                         │
+│ ❱ 1442 │   │   │   rich_text = render_markup(                                                                                             │
+│   1443 │   │   │   │   text,                                                                                                              │
+│   1444 │   │   │   │   style=style,                                                                                                       │
+│   1445 │   │   │   │   emoji=emoji_enabled,                                                                                               │
+│                                                                                                                                           │
+│ /home/rbauer/eng-orc/.venv/lib/python3.12/site-packages/rich/markup.py:167 in render                                                      │
+│                                                                                                                                           │
+│   164 │   │   │   │   │   try:                                                                                                            │
+│   165 │   │   │   │   │   │   start, open_tag = pop_style(style_name)                                                                     │
+│   166 │   │   │   │   │   except KeyError:                                                                                                │
+│ ❱ 167 │   │   │   │   │   │   raise MarkupError(                                                                                          │
+│   168 │   │   │   │   │   │   │   f"closing tag '{tag.markup}' at position {position} doesn't match any open tag"                         │
+│   169 │   │   │   │   │   │   ) from None                                                                                                 │
+│   170 │   │   │   │   else:  # implicit close                                                                                             │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+MarkupError: closing tag '[/home/rbauer/models/Qwen3.5-4B-UD-Q4_K_XL.gguf]' at position 0 doesn't match any open tag

@@ -55,6 +55,36 @@ class SwapServer:
                 return model
         return None
 
+    def known_model_names(self) -> set[str]:
+        """Best-effort model names from llama-swap's own API — includes
+        aliases on versions/configs where /v1/models does not. Defensive
+        about response shape; an empty set just means no extra knowledge."""
+        names: set[str] = set()
+        try:
+            resp = self._http.get("/api/models")
+            if resp.status_code == 200:
+                data = resp.json()
+                entries = data.get("models", data) if isinstance(data, dict) else data
+                if isinstance(entries, list):
+                    for entry in entries:
+                        if isinstance(entry, str):
+                            names.add(entry)
+                        elif isinstance(entry, dict):
+                            for key in ("id", "name", "model"):
+                                value = entry.get(key)
+                                if isinstance(value, str) and value:
+                                    names.add(value)
+                            aliases = entry.get("aliases")
+                            if isinstance(aliases, list):
+                                names.update(a for a in aliases if isinstance(a, str))
+        except (httpx.HTTPError, ValueError):
+            pass
+        for entry in self.running_models():
+            model = entry.get("model")
+            if isinstance(model, str):
+                names.add(model)
+        return names
+
     def unload_all(self) -> bool:
         """Frees VRAM (e.g. before the user wants the GPU for something else)."""
         for method, path in (("POST", "/api/models/unload"), ("GET", "/unload")):

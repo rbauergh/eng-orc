@@ -3,6 +3,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=common.sh
+. "$SCRIPT_DIR/common.sh"
 
 if systemctl --user list-unit-files llama-swap.service >/dev/null 2>&1; then
   systemctl --user start llama-swap.service
@@ -12,11 +14,13 @@ else
   echo "  ~/.local/bin/llama-swap --config ~/.config/llama-swap/config.yaml --listen 0.0.0.0:9292)"
 fi
 
-if command -v docker >/dev/null 2>&1 && [ -f "$REPO_ROOT/server/letta/.env" ]; then
+if [ ! -f "$REPO_ROOT/server/letta/.env" ]; then
+  echo "letta: skipped (no server/letta/.env — copy .env.example; memory stays local)"
+elif docker_ready; then
   (cd "$REPO_ROOT/server/letta" && docker compose up -d)
   echo "letta: starting on :8283"
 else
-  echo "letta: skipped (no docker or server/letta/.env — memory falls back to local store)"
+  echo "letta: skipped until docker is usable (see above — memory falls back to local store)"
 fi
 
 echo

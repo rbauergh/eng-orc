@@ -379,7 +379,7 @@ def doctor() -> None:
 
     def row(name: str, ok: bool | None, detail: str = "") -> None:
         mark = {True: "[green]ok[/green]", False: "[red]FAIL[/red]", None: "[yellow]warn[/yellow]"}[ok]
-        table.add_row(name, mark, shorten(detail, 70))
+        table.add_row(name, mark, shorten(detail, 90))
 
     row("home writable", config.home.exists() or config.home.parent.exists(), str(config.home))
     row("config file", config.config_path.exists(), str(config.config_path)
@@ -401,29 +401,31 @@ def doctor() -> None:
     svc = services()
     server_up = svc.client.health()
     row("llm server", server_up, config.server.base_url)
+    unlisted: list[str] = []
     if server_up:
         from .llm.catalog import chat_model_roles
 
-        served = set(svc.client.model_ids())
-        alias_hint = (
-            "not in /v1/models — if this is a llama-swap alias, set "
-            "includeAliasesInList: true in the llama-swap config and restart it"
-        )
+        served = set(svc.client.model_ids()) | svc.swap.known_model_names()
+
+        def model_row(label: str, name: str) -> None:
+            # An incomplete listing is a warning, not a failure: llama-swap
+            # routes aliases correctly even when it doesn't list them.
+            if name in served:
+                row(label, True, name)
+            else:
+                unlisted.append(f"{label} → {name}")
+                row(label, None, f"{name} — not in the server's listing (note below)")
+
         for name, role_model in chat_model_roles(config).items():
-            ok_role = role_model.model in served
-            row(f"model role: {name}", ok_role, role_model.model if ok_role else
-                f"{role_model.model}: {alias_hint}")
+            model_row(f"model role: {name}", role_model.model)
         for seat in config.review.panel:
             try:
-                seat_model = config.models.for_role(seat.model_role)
-                row(f"review seat: {seat.lens}", seat_model.model in served,
-                    f"{seat.model_role} → {seat_model.model}")
+                model_row(f"review seat: {seat.lens}", config.models.for_role(seat.model_role).model)
             except KeyError:
                 row(f"review seat: {seat.lens}", False, f"unknown model role {seat.model_role!r}")
         for fallback in config.run.coder_fallbacks:
             try:
-                fb_model = config.models.for_role(fallback)
-                row(f"coder fallback: {fallback}", fb_model.model in served, fb_model.model)
+                model_row(f"coder fallback: {fallback}", config.models.for_role(fallback).model)
             except KeyError:
                 row(f"coder fallback: {fallback}", False, "unknown model role")
         try:
@@ -440,6 +442,17 @@ def doctor() -> None:
     row("nvidia-smi", (nvidia is not None) or None, "GPU visibility (informational)")
 
     _console().print(table)
+    if unlisted:
+        log.warn("configured names missing from the server's model listing:")
+        for entry in unlisted:
+            log.info(f"  · {entry}")
+        log.info(
+            "Aliases route correctly even when unlisted, so these usually work anyway.\n"
+            "To make the listing complete (also needed for Letta model discovery), the\n"
+            "llama-swap config must contain includeAliasesInList: true — the shipped\n"
+            "profiles do. Easiest fix: re-run scripts/setup_wsl.sh, which re-copies the\n"
+            "profile config and restarts llama-swap."
+        )
 
 
 def main() -> None:

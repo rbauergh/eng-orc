@@ -64,6 +64,13 @@ still works via repo map + grep — the index is an accelerator.
 
 ## Memory / Letta
 
+**"permission denied" talking to the Docker API (pulling letta/letta).**
+Your user isn't in the docker group: `sudo usermod -aG docker $USER`, then a
+NEW shell (`newgrp docker` for the current one; `wsl --shutdown` applies it
+everywhere). If it instead says the daemon isn't running:
+`sudo systemctl enable --now docker`. The stack scripts print this guidance
+themselves now.
+
 **Doctor shows `letta unreachable`.**
 `cd server/letta && docker compose ps` / `logs`. First boot migrations take
 ~2 min. eng-orc keeps writing to the local store and syncs later

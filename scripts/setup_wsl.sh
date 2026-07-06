@@ -213,7 +213,9 @@ if [ "$DO_SERVICES" = 1 ] && command -v systemctl >/dev/null 2>&1 \
   mkdir -p "$HOME/.config/systemd/user"
   cp "$SCRIPT_DIR/systemd/llama-swap.service" "$HOME/.config/systemd/user/llama-swap.service"
   systemctl --user daemon-reload
-  systemctl --user enable --now llama-swap.service
+  systemctl --user enable llama-swap.service
+  # restart (not just start): re-runs must pick up a freshly copied profile config
+  systemctl --user restart llama-swap.service
   loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" || \
     warn "could not enable linger; llama-swap will only run while you are logged in"
 else
@@ -222,15 +224,17 @@ else
 fi
 
 # --- 11. Letta memory server ------------------------------------------------------------------------------------
+# shellcheck source=common.sh
+. "$SCRIPT_DIR/common.sh"
 if [ "$DO_LETTA" = 1 ]; then
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  if docker_ready && docker compose version >/dev/null 2>&1; then
     log "starting Letta (docker compose)"
     [ -f "$REPO_ROOT/server/letta/.env" ] || cp "$REPO_ROOT/server/letta/.env.example" "$REPO_ROOT/server/letta/.env"
     (cd "$REPO_ROOT/server/letta" && docker compose up -d)
     log "letta starting at http://127.0.0.1:8283 (first boot runs migrations — give it ~2 min)"
   else
-    warn "docker compose not available — skipping Letta. eng-orc degrades to its local memory"
-    warn "store automatically; start Letta later with: cd server/letta && docker compose up -d"
+    warn "skipping Letta (see the docker guidance above). eng-orc degrades to its local"
+    warn "memory store automatically; start Letta later with: scripts/start_stack.sh"
   fi
 fi
 

@@ -1,5 +1,5 @@
 # orc diagnostics report
-_generated 2026-07-06T17:50:19+00:00 · eng-orc 0.1.0 (commit c711936) · python 3.12.3 · Linux-5.15.133.1-microsoft-standard-WSL2-x86_64-with-glibc2.39_
+_generated 2026-07-06T18:41:12+00:00 · eng-orc 0.1.0 (commit bf3bee8) · python 3.12.3 · Linux-5.15.133.1-microsoft-standard-WSL2-x86_64-with-glibc2.39_
 
 ## Environment checks
 - [ok] home writable — /home/rbauer/.eng-orc
@@ -8,6 +8,7 @@ _generated 2026-07-06T17:50:19+00:00 · eng-orc 0.1.0 (commit c711936) · python
 - [ok] binary: rg
 - [ok] binary: ctags
 - [ok] binary: bash
+- [ok] python3 venv support — project dependency sandboxes
 - [ok] python: langgraph — orchestration
 - [ok] python: llama_index.core — code index
 - [ok] python: chromadb — vector store
@@ -144,6 +145,7 @@ run:
   test_first: auto
   review_tests: true
   intake_rounds: 10
+  project_venvs: true
   max_tool_output_chars: 6000
   shell_timeout: 300.0
   verify_timeout: 600.0
@@ -202,17 +204,17 @@ log_level: info
 
 ## GPU
 - resident: jina-embed (ready)
-  slots: [{"id": 0, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 8192, "speculative": false, "is_processing": false, "id_task": 19721, "n_prompt_tokens": 1, "n_prompt_tokens_processed": 1, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 40, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": -1, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": -1, "n_predict": -1, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "Content-only", "reasoning_format": "none", "reasoning_in_content": false, "generation_prompt": "", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": true, "has_new_line": false, "n_remain": -1, "n_deco
+  slots: [{"id": 0, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 8192, "speculative": false, "is_processing": false, "id_task": 20999, "n_prompt_tokens": 1, "n_prompt_tokens_processed": 1, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 40, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": -1, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": -1, "n_predict": -1, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "Content-only", "reasoning_format": "none", "reasoning_in_content": false, "generation_prompt": "", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": true, "has_new_line": false, "n_remain": -1, "n_deco
 - resident: qwen3.6-35b (ready)
-  slots: [{"id": 0, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 49152, "speculative": false, "is_processing": false, "id_task": 8355, "n_prompt_tokens": 5203, "n_prompt_tokens_processed": 88, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 20, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": 49152, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": 4096, "n_predict": 4096, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "peg-native", "reasoning_format": "deepseek", "reasoning_in_content": false, "generation_prompt": "<|im_start|>assistant\n<think>\n", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": fals
-- 17:25:15 nemotron-3-nano loading …
-- 17:25:17 nemotron-3-nano load aborted after 2s
-- 17:25:17 gpt-oss-20b loading …
-- 17:25:44 gpt-oss-20b loaded in 27s
-- 17:25:49 gpt-oss-20b loading …
-- 17:25:51 gpt-oss-20b load aborted after 2s
-- 17:25:51 qwen3.6-35b loading …
-- 17:26:33 qwen3.6-35b loaded in 42s
+  slots: [{"id": 0, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 49152, "speculative": false, "is_processing": false, "id_task": 0, "n_prompt_tokens": 3552, "n_prompt_tokens_processed": 1067, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 20, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": 49152, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": 4096, "n_predict": 4096, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "peg-native", "reasoning_format": "deepseek", "reasoning_in_content": false, "generation_prompt": "<|im_start|>assistant\n<think>\n", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": false
+- 18:36:49 qwen3.6-35b loading …
+- 18:36:51 qwen3.6-35b load aborted after 2s
+- 18:36:51 gpt-oss-20b loading …
+- 18:37:18 gpt-oss-20b loaded in 27s
+- 18:37:23 gpt-oss-20b loading …
+- 18:37:25 gpt-oss-20b load aborted after 2s
+- 18:37:25 qwen3.6-35b loading …
+- 18:38:07 qwen3.6-35b loaded in 42s
 
 ## Projects
 ### hello-world-script
@@ -246,33 +248,32 @@ recent activity:
 - [07-06T06:31] state → done mission wrapped
 
 ### local-hello-world-time-server
-phase build · state blocked_on_user (work items exhausted their attempts) · plan 0/4 · open gates 1
+phase wrap · state active (user answered) · plan 2/4 · open gates 0
 
 | item | title | status | attempts | triaged |
 | --- | --- | --- | --- | --- |
-| d9xa5d | Initialize project dependencies | failed | 3 | 1 |
-| zv0tm2 | Implement Flask application entry point | todo | 0 | 0 |
-| h2kd1j | Create HTML template with client-side clock | todo | 0 | 0 |
+| d9xa5d | Initialize project dependencies | done | 1 | 1 |
+| zv0tm2 | Implement Flask application entry point | done | 1 | 0 |
+| h2kd1j | Create HTML template with client-side clock | dropped | 3 | 2 |
 | f13ekd | Add smoke test for integration verification | todo | 0 | 0 |
 
-#### problem item d9xa5d: Initialize project dependencies (failed)
-acceptance: `requirements.txt` exists and lists `flask`.; `pip install -r requirements.txt` has been executed successfully.; `python -c "import flask"` succeeds without error.
-- attempt [implementer/coder] fail: review panel requested changes (1 blocking finding(s) across 4 reviewer(s))
-  verification: [PASS] python -c "import flask"
-- attempt [implementer/coder] fail: review panel requested changes (1 blocking finding(s) across 4 reviewer(s))
-  verification: [PASS] python -c "import flask"
+#### problem item h2kd1j: Create HTML template with client-side clock (dropped)
+acceptance: `templates/index.html` exists.; The HTML body contains the text 'Hello, world!'.; The HTML contains a `<span>` or `<div>` with an ID (e.g., `clock`) for the time display.; The HTML contains a `<script>` block defining an `updateClock` function.; The script uses `setInterval` to call `updateClock` every 1000ms.; The function updates the inner text of the clock element with the current local time.
+- attempt [implementer/coder] fail: finished without changing any files
+  verification: [PASS] grep -q "Hello, world!" templates/index.html [PASS] grep -q "setInterval" templates/index.html
+- attempt [implementer/coder] stuck: repeated the same action three times: finish
 - attempt [implementer/coder-fast] stuck: three malformed replies in a row
-- note: review[architecture] BUG/blocker: Flask is not installed; only requirements.txt created. → Run `pip install -r requirements.txt` to install Flask into the current environment.
-- note: review[architecture] TEST_GAP/blocker: The acceptance criteria require Flask to be installed in the environment, but the diff only creates requirements.txt and does not execute any installation command. → Add a step to install Flask, e.g., run `pip install -r…
-- note: triage#1: The agent is failing to execute the installation command required by the acceptance criteria, resulting in a reviewer blocker. The verification command passed, but the reviewer is checking the diff a…
-- note: triage guidance: The acceptance criteria requires Flask to be installed, but the agent only creates the requirements file. You must explicitly run `pip install -r requirements.txt` and verify the import. Update the acceptance criteria to require the installat…
-- note: review[architecture] TEST_GAP/blocker: The diff adds requirements.txt but does not demonstrate the required pip install execution or the import verification step. → Run `pip install -r requirements.txt` and verify the installation with `python -c "import flas…
-- note: review[architecture] TEST_GAP/major: Acceptance criteria require execution of `pip install -r requirements.txt` and verification that `python -c "import flask"` succeeds, but these steps are not shown in the diff. → Run `pip install -r requirements.txt` and v…
+- note: previous attempt claimed done but produced no file changes
+- note: previous attempt claimed done but produced no file changes
+- note: triage#1: The verification suite passed, proving the target file exists and meets criteria. The implementer is stuck in a 'finished without changing files' loop, likely because it failed to detect the existing file or is hallucinating a failure. One attempt a…
+- note: triage guidance: Verification passed! The file `templates/index.html` already exists and contains the correct content. The implementer is incorrectly reporting no changes. Please verify the file exists before attempting to write; if it exists and passes verif…
+- note: previous attempt claimed done but produced no file changes
+- note: triage#2: The item is already complete and verified. The verification suite passed (`grep` confirmed both required strings exist in `templates/index.html`). The implementer is stuck in a 'finished without changing files' loop because the system is re-queuing …
 
 latest attempt transcript (tail):
 ```
 # implementer attempt — stuck
-_2026-07-06T17:25:48+00:00_
+_2026-07-06T18:37:23+00:00_
 
 **Summary:** three malformed replies in a row
 
@@ -280,40 +281,49 @@ _2026-07-06T17:25:48+00:00_
 ### Model
 
 ### Observation
-FORMAT ERROR: your reply had no visible content — if you were reasoning, you likely spent the whole output budget on it. Answer with a ONE-sentence thought and the ACTION line immediately.
+FORMAT ERROR: no ACTION line found. Reply with exactly one line like: ACTION: tool_name {"arg": "value"} (plus a fenced payload when needed).
 
 ## Turn 2
 ### Model
 
 ### Observation
-FORMAT ERROR: your reply had no visible content — if you were reasoning, you likely spent the whole output budget on it. Answer with a ONE-sentence thought and the ACTION line immediately.
+FORMAT ERROR: no ACTION line found. Reply with exactly one line like: ACTION: tool_name {"arg": "value"} (plus a fenced payload when needed).
 
 ## Turn 3
 ### Model
 
 ### Observation
-FORMAT ERROR: your reply had no visible content — if you were reasoning, you likely spent the whole output budget on it. Answer with a ONE-sentence thought and the ACTION line immediately.
+FORMAT ERROR: no ACTION line found. Reply with exactly one line like: ACTION: tool_name {"arg": "value"} (plus a fenced payload when needed).
 ```
 
 gates:
-- OPEN [supervisor] Triage could not unstick these items and I need direction (simplify the goal, drop them, or point at the fix): - 'Initialize project dependencies': three malformed replies in a row | triage#1: The agent is failing to execute the installation command required by the acceptance criteria, resulting in a reviewer blocker. The verification command passed, but the reviewer is checking the diff a…
+- answered [supervisor] Q: Triage could not unstick these items and I need direction (simplify the goal, drop them, or point at the fix): - 'Initialize project dependencies': three malformed replies in a row | triage#1: The ag… → A: try again
 
 recent errors:
 - [07-06T16:45] [planner] PlanDraft failed validation after 3 rounds: Unterminated string starting at: line 2 column 16 (char 17)
 - [07-06T17:09] [triage] systemic: [planner] PlanDraft failed validation after 3 rounds: Unterminated string starting at: line 2 column 16 (char 17) - JSON parsing error in planner.
 - [07-06T17:35] [triage] TriageReport failed validation after 3 rounds: Expecting value: line 1 column 1 (char 0)
+- [07-06T18:33] [triage] systemic: [planner] PlanDraft failed validation after 3 rounds: Unterminated string starting at: line 2 column 16 (char 17). This JSON parsing error may be contributing to malformed outputs from the planning stage.
+- [07-06T18:33] [triage] systemic: [triage] TriageReport failed validation after 3 rounds: Expecting value: line 1 column 1 (char 0).
+- [07-06T18:40] [triage] systemic: [planner] PlanDraft failed validation after 3 rounds: Unterminated string starting at: line 2 column 16 (char 17)
+- [07-06T18:40] [triage] systemic: [triage] TriageReport failed validation after 3 rounds: Expecting value: line 1 column 1 (char 0)
+- [07-06T18:40] [triage] systemic: These JSON parsing errors are corrupting the task lifecycle. The planner is emitting malformed JSON, which breaks the triage/report parser and prevents the system from properly closing completed tasks. This is causing implementers to be re-queued indefinitely for already-done work. Fix th…
 
 recent activity:
-- [07-06T17:23] review on wi_1kww5db8hbpd9xa5d: approve (0 findings)
-- [07-06T17:25] review on wi_1kww5db8hbpd9xa5d: request_changes (1 findings)
-- [07-06T17:25] attempt started by implementer on wi_1kww5db8hbpd9xa5d
-- [07-06T17:25] attempt on wi_1kww5db8hbpd9xa5d: stuck — three malformed replies in a row
-- [07-06T17:35] error[triage]: TriageReport failed validation after 3 rounds: Expecting value: line 1 column 1 (char 0)
-- [07-06T17:35] state → blocked_on_user work items exhausted their attempts
+- [07-06T18:40] entered phase build
+- [07-06T18:40] entered phase wrap
+- [07-06T18:40] entered phase build
+- [07-06T18:40] entered phase wrap
+- [07-06T18:40] entered phase build
+- [07-06T18:40] entered phase wrap
+- [07-06T18:40] entered phase build
+- [07-06T18:40] entered phase wrap
+- [07-06T18:40] entered phase build
+- [07-06T18:40] entered phase wrap
 
 ## llama-swap service log (tail)
 ```
-Jul 06 10:49:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 38.723µs Jul 06 10:49:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 583.114µs Jul 06 10:49:55 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 478.891µs Jul 06 10:49:57 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 54.785µs Jul 06 10:49:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 40.347µs Jul 06 10:49:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 546.345µs Jul 06 10:49:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 460.632µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 47.992µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.137µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 532.434µs Jul 06 10:50:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 491.23µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 49.233µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 51.448µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 516.464µs Jul 06 10:50:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 480.676µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 49.765µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 36.82µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 526.592µs Jul 06 10:50:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 477.448µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 57.128µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 41.028µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 869.319µs Jul 06 10:50:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 478.049µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 60.245µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 36.7µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 524.178µs Jul 06 10:50:08 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 466.725µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 55.455µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 37.862µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 535.289µs Jul 06 10:50:10 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 461.518µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 55.786µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.928µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 540.208µs Jul 06 10:50:12 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 459.345µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 50.566µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 34.826µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1372 "python-httpx/0.28.1" 558.326µs Jul 06 10:50:14 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1425 "python-httpx/0.28.1" 451.614µs Jul 06 10:50:16 BATTLESTATION-REN llama-swap[68355]: [INFO] Request…
+Jul 06 11:40:50 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 46.809µs Jul 06 11:40:50 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.167µs Jul 06 11:40:50 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 531.531µs Jul 06 11:40:50 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 493.238µs Jul 06 11:40:52 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 41.96µs Jul 06 11:40:52 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.117µs Jul 06 11:40:52 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 604.128µs Jul 06 11:40:52 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 487.578µs Jul 06 11:40:54 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 49.414µs Jul 06 11:40:54 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 36.078µs Jul 06 11:40:54 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 1.96055ms Jul 06 11:40:54 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 475.946µs Jul 06 11:40:56 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 63.872µs Jul 06 11:40:56 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 33.804µs Jul 06 11:40:56 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 536.851µs Jul 06 11:40:56 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 475.384µs Jul 06 11:40:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 364.643µs Jul 06 11:40:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 48.713µs Jul 06 11:40:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 562.762µs Jul 06 11:40:58 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 670.11µs Jul 06 11:41:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 88.478µs Jul 06 11:41:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 33.904µs Jul 06 11:41:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 1.759257ms Jul 06 11:41:00 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 507.199µs Jul 06 11:41:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 44.154µs Jul 06 11:41:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.487µs Jul 06 11:41:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 1.23478ms Jul 06 11:41:02 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 449.866µs Jul 06 11:41:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 43.923µs Jul 06 11:41:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 32.832µs Jul 06 11:41:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 526.844µs Jul 06 11:41:04 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 460.234µs Jul 06 11:41:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 42.401µs Jul 06 11:41:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 32.472µs Jul 06 11:41:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 538.055µs Jul 06 11:41:06 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1427 "python-httpx/0.28.1" 648.164µs Jul 06 11:41:09 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 39.204µs Jul 06 11:41:09 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 37.882µs Jul 06 11:41:09 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 529.868µs Jul 06 11:41:09 BATTLESTATION-REN llama-swap[68355]: [INFO] Request 127.0.0.1 "GE…
 ```
 
 _This report is generated by `orc bugreport` and is safe to share: config

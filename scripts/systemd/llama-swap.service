@@ -1,0 +1,16 @@
+[Unit]
+Description=llama-swap model proxy (eng-orc serving hub)
+After=network.target
+
+[Service]
+# 0.0.0.0 so the Letta docker container can reach it via host-gateway;
+# under WSL2 NAT this is still local-machine-only unless you forward ports.
+ExecStart=%h/.local/bin/llama-swap --config %h/.config/llama-swap/config.yaml --listen 0.0.0.0:9292
+Restart=on-failure
+RestartSec=3
+# --mlock in the model commands needs this (keeps CPU-resident MoE experts
+# from being reclaimed by WSL's autoMemoryReclaim)
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=default.target

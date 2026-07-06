@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eng-orc"
+version = "0.1.0"
+description = "Multi-project software-engineering orchestrator for a single local GPU (llama.cpp + LangGraph + LlamaIndex + Letta)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "rbauer" }]
+dependencies = [
+    # core
+    "pydantic>=2.9,<3",
+    "pyyaml>=6.0",
+    "httpx>=0.27,<1",
+    "tenacity>=9,<10",
+    "typer>=0.12",
+    "rich>=13.7",
+    "watchfiles>=0.24",
+    # orchestration (langgraph 1.x — stable API since 1.0, Oct 2025)
+    "langgraph>=1.0,<2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    # codebase indexing
+    "llama-index-core>=0.14,<0.16",
+    "llama-index-embeddings-openai-like>=0.3,<0.5",
+    "llama-index-vector-stores-chroma>=0.5,<0.7",
+    "chromadb>=1.0,<2",
+    "tree-sitter>=0.23",
+    "tree-sitter-language-pack>=1.0,<2",
+    # long-term memory
+    "letta-client>=0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-timeout>=2.3",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+orc = "engorc.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/engorc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 180
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# typer's declarative Option/Argument defaults are the framework idiom
+"src/engorc/cli.py" = ["B008"]

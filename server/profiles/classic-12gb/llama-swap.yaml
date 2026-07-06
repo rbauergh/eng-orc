@@ -1,0 +1,74 @@
+# llama-swap config — profile: classic-12gb
+# The proven-2025 fallback stack: dense models, mature chat templates, no
+# MoE offload, no new-architecture parser risk. Use when the balanced
+# profile's models misbehave or host RAM is scarce (works with 16 GB).
+
+healthCheckTimeout: 300
+logLevel: info
+
+macros:
+  srv: "${env.HOME}/llama.cpp/build/bin/llama-server --host 127.0.0.1 --port ${PORT}"
+  models: "${env.HOME}/models"
+
+models:
+  # Dense Qwen2.5-Coder-14B, fully on GPU. 12 GB budget forces ctx 12288 with
+  # q8_0 KV; for 16k switch weights to IQ4_XS. Optional 2x speedup: download
+  # the 0.5B draft and append:
+  #   -md ${models}/Qwen2.5-Coder-0.5B-Instruct-Q8_0.gguf
+  #   --spec-type draft-simple --spec-draft-n-max 12 --spec-draft-p-min 0.75
+  #   -ngld 99 -ctkd q8_0 -ctvd q8_0
+  # (costs ~0.7 GB VRAM — drop -c to 8192 to make room)
+  "qwen2.5-coder-14b":
+    name: "Qwen2.5-Coder-14B-Instruct (Q4_K_M)"
+    cmd: |
+      ${srv} -m ${models}/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+      --jinja -fa on -c 12288 -ngl 99 -ctk q8_0 -ctv q8_0 --cache-reuse 256
+      --temp 0.2 --top-p 0.9
+    aliases: ["coder"]
+    ttl: 1800
+
+  # gpt-oss-20b as the reasoning planner (reasoning_effort set per request by orc).
+  "gpt-oss-20b":
+    name: "gpt-oss-20b (MXFP4)"
+    cmd: |
+      ${srv} -m ${models}/gpt-oss-20b-mxfp4.gguf
+      --jinja -fa on -c 32768 -ngl 99 --n-cpu-moe 4 -b 2048 -ub 2048
+      --temp 1.0 --top-p 1.0 --top-k 0
+    aliases: ["planner"]
+    ttl: 900
+
+  # Qwen3-4B-Instruct-2507: 2025-proven small model, old tokenizer, rock-solid template.
+  "qwen3-4b":
+    name: "Qwen3-4B-Instruct-2507 (Q4_K_M)"
+    cmd: |
+      ${srv} -m ${models}/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+      --jinja -fa on -c 16384 -ngl 99 -ctk q8_0 -ctv q8_0
+      --temp 0.2 --top-p 0.95
+    aliases: ["utility"]
+    ttl: 600
+
+  "qwen3-embed":
+    name: "Qwen3-Embedding-0.6B"
+    cmd: |
+      ${srv} -m ${models}/Qwen3-Embedding-0.6B-Q8_0.gguf
+      --embedding --pooling last -ngl 0 -c 8192 -b 8192 -ub 4096 --threads 4
+    aliases: ["embed"]
+
+hooks:
+  on_startup:
+    preload: ["qwen3-embed"]
+
+routing:
+  router:
+    use: group
+    settings:
+      groups:
+        gpu:
+          swap: true
+          exclusive: true
+          members: ["qwen2.5-coder-14b", "gpt-oss-20b", "qwen3-4b"]
+        cpu-resident:
+          persistent: true
+          swap: false
+          exclusive: false
+          members: ["qwen3-embed"]

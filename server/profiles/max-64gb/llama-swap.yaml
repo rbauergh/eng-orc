@@ -1,0 +1,69 @@
+# llama-swap config — profile: max-64gb
+# Target: RTX 4070 Ti (12 GB) + 64 GB host RAM (DDR5 strongly recommended —
+# MoE decode speed is RAM-bandwidth-bound; enable XMP/EXPO).
+# Coder: Qwen3-Coder-Next 80B-A3B — ~40 tok/s proven on this GPU class with
+# DDR5-6000. Planner: Qwen3.6-35B-A3B with built-in MTP speculative decoding.
+
+healthCheckTimeout: 900
+logLevel: info
+
+macros:
+  srv: "${env.HOME}/llama.cpp/build/bin/llama-server --host 127.0.0.1 --port ${PORT}"
+  models: "${env.HOME}/models"
+
+models:
+  "qwen3-coder-next":
+    name: "Qwen3-Coder-Next 80B-A3B (IQ4_XS)"
+    cmd: |
+      ${srv} -m ${models}/Qwen_Qwen3-Coder-Next-IQ4_XS.gguf
+      --jinja -fa on --fit on --fit-ctx 65536
+      -ctk q8_0 -ctv q8_0 -b 2048 -ub 512 --mlock
+      --temp 0.7 --top-p 0.95 --min-p 0.01 --top-k 40
+    aliases: ["coder"]
+    ttl: 1800
+
+  "qwen3.6-35b-mtp":
+    name: "Qwen3.6-35B-A3B MTP (UD-Q4_K_XL)"
+    cmd: |
+      ${srv} -m ${models}/Qwen3.6-35B-A3B-MTP-UD-Q4_K_XL.gguf
+      --jinja -fa on -c 49152 -ngl 99 --n-cpu-moe 32
+      -ctk q8_0 -ctv q8_0 --cache-reuse 256 --mlock
+      --spec-type draft-mtp --spec-draft-n-max 2
+      --temp 1.0 --top-p 0.95 --top-k 20
+    aliases: ["planner"]
+    ttl: 1200
+
+  "qwen3.5-4b":
+    name: "Qwen3.5-4B (UD-Q4_K_XL)"
+    cmd: |
+      ${srv} -m ${models}/Qwen3.5-4B-UD-Q4_K_XL.gguf
+      --jinja -fa on -c 32768 -ngl 99 -ctk q8_0 -ctv q8_0
+      --temp 0.2 --top-p 0.95
+    aliases: ["utility"]
+    ttl: 600
+
+  "jina-embed":
+    name: "jina-code-embeddings-0.5b"
+    cmd: |
+      ${srv} -m ${models}/jina-code-embeddings-0.5b-F16.gguf
+      --embedding --pooling last -ngl 0 -c 8192 -b 8192 -ub 4096 --threads 4
+    aliases: ["embed"]
+
+hooks:
+  on_startup:
+    preload: ["jina-embed"]
+
+routing:
+  router:
+    use: group
+    settings:
+      groups:
+        gpu:
+          swap: true
+          exclusive: true
+          members: ["qwen3-coder-next", "qwen3.6-35b-mtp", "qwen3.5-4b"]
+        cpu-resident:
+          persistent: true
+          swap: false
+          exclusive: false
+          members: ["jina-embed"]

@@ -1,0 +1,82 @@
+# llama-swap config — profile: balanced-12gb
+# Target: RTX 4070 Ti (12 GB) + >=32 GB host RAM, WSL2 Ubuntu.
+# One GPU chat model at a time (swap group); the code-embedding model is
+# CPU-only and persistent, so indexing never evicts the chat model.
+#
+# orc talks to the aliases (coder / planner / utility / embed); switching
+# profiles never touches ~/.eng-orc/config.yaml beyond the models section.
+
+healthCheckTimeout: 600   # first load of the 35B MoE from a cold page cache is slow
+logLevel: info
+
+macros:
+  srv: "${env.HOME}/llama.cpp/build/bin/llama-server --host 127.0.0.1 --port ${PORT}"
+  models: "${env.HOME}/models"
+
+models:
+  # Qwen3.6-35B-A3B: SWE-bench-Verified 73.4 in a 17.7 GB quant. MoE with
+  # 3B active params: attention+shared tensors sit on the GPU, expert layers
+  # on CPU (--n-cpu-moe). Serves BOTH coder and planner roles — orc pins
+  # thinking off/on per request via chat_template_kwargs, so no swap happens
+  # between implementation and planning work.
+  "qwen3.6-35b":
+    name: "Qwen3.6-35B-A3B (UD-IQ4_XS)"
+    cmd: |
+      ${srv} -m ${models}/Qwen3.6-35B-A3B-UD-IQ4_XS.gguf
+      --jinja -fa on -c 49152 -ngl 99 --n-cpu-moe 32
+      -ctk q8_0 -ctv q8_0 --cache-reuse 256 --mlock
+      --temp 0.6 --top-p 0.95 --top-k 20
+    # tuning: lower --n-cpu-moe until `nvidia-smi` shows ~11 GB used
+    # (each expert layer moved to GPU ≈ +0.31 GB and a bit more speed)
+    aliases: ["coder", "planner"]
+    ttl: 1800
+
+  # Qwen3.5-4B utility: summaries, digests, extraction. 100+ tok/s fully on GPU.
+  "qwen3.5-4b":
+    name: "Qwen3.5-4B (UD-Q4_K_XL)"
+    cmd: |
+      ${srv} -m ${models}/Qwen3.5-4B-UD-Q4_K_XL.gguf
+      --jinja -fa on -c 32768 -ngl 99 -ctk q8_0 -ctv q8_0
+      --temp 0.2 --top-p 0.95
+    aliases: ["utility"]
+    ttl: 600
+
+  # gpt-oss-20b: fast alternate coder / second-opinion planner (optional
+  # download). 56-67+ tok/s on 12 GB with a few expert layers on CPU; the
+  # most battle-tested tool-calling template stack in llama.cpp.
+  "gpt-oss-20b":
+    name: "gpt-oss-20b (MXFP4)"
+    cmd: |
+      ${srv} -m ${models}/gpt-oss-20b-mxfp4.gguf
+      --jinja -fa on -c 32768 -ngl 99 --n-cpu-moe 4 -b 2048 -ub 2048
+      --temp 1.0 --top-p 1.0 --top-k 0
+    aliases: ["coder-fast"]
+    ttl: 900
+
+  # jina-code-embeddings-0.5b: SOTA code retrieval at 0.5B. CPU-only (-ngl 0)
+  # so it can stay resident forever without costing a byte of VRAM.
+  "jina-embed":
+    name: "jina-code-embeddings-0.5b"
+    cmd: |
+      ${srv} -m ${models}/jina-code-embeddings-0.5b-F16.gguf
+      --embedding --pooling last -ngl 0 -c 8192 -b 8192 -ub 4096 --threads 4
+    aliases: ["embed"]
+
+hooks:
+  on_startup:
+    preload: ["jina-embed"]
+
+routing:
+  router:
+    use: group
+    settings:
+      groups:
+        gpu:               # one chat model resident at a time on the 12 GB card
+          swap: true
+          exclusive: true
+          members: ["qwen3.6-35b", "qwen3.5-4b", "gpt-oss-20b"]
+        cpu-resident:      # chat swaps can never evict the embedder
+          persistent: true
+          swap: false
+          exclusive: false
+          members: ["jina-embed"]

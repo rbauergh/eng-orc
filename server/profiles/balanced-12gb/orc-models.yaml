@@ -1,0 +1,31 @@
+# merged into ~/.eng-orc/config.yaml by setup (or by hand): the models section
+# matching the balanced-12gb llama-swap profile.
+models:
+  profile: balanced-12gb
+  coder:
+    model: coder                    # llama-swap alias → Qwen3.6-35B-A3B, thinking off
+    context_window: 16384           # effective reasoning budget, not the served max
+    max_output_tokens: 3072
+    temperature: 0.6
+    top_p: 0.95
+    thinking: false
+    extra_body:
+      chat_template_kwargs: {enable_thinking: false}   # also dodges the Qwen3.x
+                                                       # tool-tag parser bug (llama.cpp #21158)
+  planner:
+    model: planner                  # same resident model, thinking on — no swap
+    context_window: 12288
+    max_output_tokens: 4096
+    temperature: 0.8
+    top_p: 0.95
+    thinking: true
+    extra_body:
+      chat_template_kwargs: {enable_thinking: true}
+  utility:
+    model: utility
+    context_window: 8192
+    max_output_tokens: 1024
+    temperature: 0.2
+  embedder:
+    model: embed
+    batch_size: 16

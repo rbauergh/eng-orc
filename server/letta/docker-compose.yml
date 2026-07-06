@@ -1,0 +1,47 @@
+# Letta memory server + Postgres/pgvector, wired to the local llama-swap
+# endpoint on the WSL2 host. Bring up with:
+#     cd server/letta && cp .env.example .env && docker compose up -d
+#
+# The self-hosted Letta Docker surface is officially in maintenance mode:
+# PIN the image tag in .env after your first working pull and treat the
+# (tag, letta-client version) pair as frozen. eng-orc degrades gracefully to
+# its local memory store whenever this server is down.
+
+services:
+  letta_db:
+    image: ankane/pgvector:v0.5.1
+    environment:
+      - POSTGRES_USER=letta
+      - POSTGRES_PASSWORD=letta
+      - POSTGRES_DB=letta
+    volumes:
+      - ./.persist/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U letta"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  letta_server:
+    image: letta/letta:${LETTA_TAG:-latest}
+    depends_on:
+      letta_db:
+        condition: service_healthy
+    ports:
+      - "8283:8283"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach llama-swap on the WSL2 host
+    environment:
+      - LETTA_PG_URI=postgresql://letta:letta@letta_db:5432/letta
+      # Point Letta's "openai" provider at llama-swap; model handles become
+      # openai/<llama-swap-alias>, e.g. openai/utility and openai/embed.
+      - OPENAI_API_BASE=${LLAMA_SWAP_URL:-http://host.docker.internal:9292/v1}
+      - OPENAI_API_KEY=local-dummy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8283/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s   # first boot runs alembic migrations
+    restart: unless-stopped

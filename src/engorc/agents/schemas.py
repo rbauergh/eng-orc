@@ -1,0 +1,111 @@
+"""Structured document schemas produced by one-shot agents.
+
+Every schema puts a free-text reasoning field FIRST: under grammar-constrained
+decoding the model plans in that field before committing to answers (skipping
+it measurably degrades small-model output). All fields are required — optional
+fields invite degenerate omissions from small models.
+
+These are working documents, not archives: charters become charter.yaml,
+plan drafts become plan.yaml work items, verdicts drive routing.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class Assumption(BaseModel):
+    text: str
+    confidence: float = Field(ge=0.0, le=1.0, description="0..1 that this assumption is what the user wants")
+    basis: str = Field(description="why this default is reasonable (convention, mission text, prior decision)")
+
+
+class BlockingQuestion(BaseModel):
+    question: str
+    why_blocking: str = Field(description="how the answer changes the architecture or scope")
+    options: list[str] = Field(description="2-4 concrete choices the user can pick from")
+
+
+class Charter(BaseModel):
+    reasoning: str = Field(description="think here first: what is really being asked, what can be assumed")
+    objective: str = Field(description="one paragraph: what will exist when this project is done")
+    context_summary: str = Field(description="relevant facts from the mission, codebase, and past answers")
+    assumptions: list[Assumption]
+    non_goals: list[str] = Field(description="explicitly out of scope")
+    success_criteria: list[str] = Field(description="observable, checkable statements")
+    risks: list[str]
+    blocking_questions: list[BlockingQuestion] = Field(
+        description="ONLY questions whose answers change the architecture; empty list means proceed"
+    )
+    ready_to_build: bool
+
+
+class DecisionExtract(BaseModel):
+    title: str
+    decision: str
+    rationale: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class DesignExtract(BaseModel):
+    reasoning: str
+    decisions: list[DecisionExtract] = Field(description="the consequential choices made in the design")
+    stack: list[str] = Field(description="languages, frameworks, key libraries")
+    components: list[str] = Field(description="major modules/files and their responsibilities, one line each")
+    open_questions: list[str]
+
+
+class PlanItemDraft(BaseModel):
+    title: str
+    kind: Literal["feature", "fix", "refactor", "test", "docs", "chore", "investigate", "integrate"]
+    description: str = Field(description="what to build and how it fits the design; concrete enough to start")
+    acceptance: list[str] = Field(description="checkable statements that define done")
+    verify_commands: list[str] = Field(
+        description="shell commands that must exit 0 (e.g. 'python3 -m pytest -q'); empty = project default"
+    )
+    depends_on: list[int] = Field(description="indices (0-based) of items in this plan that must finish first")
+    files_hint: list[str] = Field(description="files likely touched")
+    size: Literal["S", "M", "L"] = Field(description="S: <1h of focused work, M: one sitting, L: should be split")
+    test_first: bool = Field(description="true when tests should be written before the implementation")
+
+
+class PlanDraft(BaseModel):
+    reasoning: str
+    goal_recap: str = Field(description="one paragraph restating what the plan achieves")
+    items: list[PlanItemDraft]
+
+
+FindingCategory = Literal["BUG", "TEST_GAP", "SPEC_GAP", "STYLE", "ARCHITECTURE", "SECURITY", "PERFORMANCE"]
+FindingSeverity = Literal["blocker", "major", "minor"]
+
+
+class Finding(BaseModel):
+    category: FindingCategory
+    severity: FindingSeverity
+    description: str
+    file: str = Field(description="most relevant file, or empty")
+    recommendation: str = Field(description="the specific change that resolves this")
+
+
+class ReviewVerdict(BaseModel):
+    reasoning: str
+    findings: list[Finding]
+    verdict: Literal["approve", "request_changes"]
+    summary: str = Field(description="one paragraph for the record")
+
+    def blockers(self) -> list[Finding]:
+        return [f for f in self.findings if f.severity in ("blocker", "major")]
+
+
+class CommitMessageDraft(BaseModel):
+    reasoning: str
+    message: str = Field(description="conventional-commit style subject line, <=72 chars, imperative")
+
+
+class DigestExtract(BaseModel):
+    reasoning: str
+    summary: str = Field(description="what happened this session, one tight paragraph")
+    lessons: list[str] = Field(description="durable insights worth remembering across projects; empty if none")
+    conventions: list[str] = Field(description="user preferences observed (style, tools, workflow); empty if none")

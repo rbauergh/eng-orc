@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# runtime state (never commit orchestrator state or models)
+.eng-orc/
+*.gguf
+models/
+*.sqlite
+*.sqlite3
+*.db
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,27 @@
+# models section for the classic-12gb profile.
+models:
+  profile: classic-12gb
+  coder:
+    model: coder                    # Qwen2.5-Coder-14B dense, all-GPU
+    context_window: 10240           # server runs 12288; leave packing headroom
+    max_output_tokens: 3072
+    temperature: 0.2
+    top_p: 0.9
+    thinking: false
+  planner:
+    model: planner                  # gpt-oss-20b; harmony reasoning stays in reasoning_content
+    context_window: 16384
+    max_output_tokens: 4096
+    temperature: 1.0
+    top_p: 1.0
+    thinking: true
+    extra_body:
+      chat_template_kwargs: {reasoning_effort: high}
+  utility:
+    model: utility
+    context_window: 8192
+    max_output_tokens: 1024
+    temperature: 0.2
+  embedder:
+    model: embed
+    batch_size: 16

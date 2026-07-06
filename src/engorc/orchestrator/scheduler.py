@@ -94,6 +94,8 @@ class Scheduler:
         """Drive projects until nothing is runnable (or budget/watch says stop).
         Returns the number of steps executed."""
         steps = 0
+        last_result: tuple[str, str] | None = None
+        repeats = 0
         try:
             while True:
                 result = self.step(slug)
@@ -101,6 +103,29 @@ class Scheduler:
                     stepped_slug, note = result
                     log.step(stepped_slug, note)
                     steps += 1
+                    # Safety net: a step that changes nothing produces the same
+                    # note forever — park the project instead of spinning.
+                    if result == last_result:
+                        repeats += 1
+                        if repeats >= 3:
+                            project = self.services.registry.get(stepped_slug)
+                            project.journal.append(
+                                Kind.ERROR,
+                                error=f"scheduler loop guard: step repeated identically x{repeats + 1}: {note}",
+                            )
+                            if not project.gates.open_gates():
+                                project.gates.open(
+                                    question=("I was looping without making progress "
+                                              f"(step kept saying: {note}). This is a bug worth an "
+                                              "`orc bugreport --push`; answer anything to retry once."),
+                                    from_role="supervisor",
+                                )
+                            project.set_state("blocked_on_user", reason="loop guard tripped")
+                            log.error(f"[{stepped_slug}] loop guard tripped — project parked")
+                            last_result, repeats = None, 0
+                            continue
+                    else:
+                        last_result, repeats = result, 0
                     if max_steps is not None and steps >= max_steps:
                         log.info(f"stopped after {steps} step(s) (--max-steps)")
                         break

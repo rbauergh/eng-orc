@@ -122,8 +122,12 @@ class Plan(BaseModel):
         return visited != len(self.items)
 
     def deps_satisfied(self, item: WorkItem) -> bool:
+        """Terminal dependencies satisfy: a DROPPED dep was judged unnecessary,
+        which must not freeze its dependents forever."""
         index = self.by_id()
-        return all(index[d].status == "done" for d in item.depends_on if d in index)
+        return all(
+            index[d].status in TERMINAL_STATUSES for d in item.depends_on if d in index
+        )
 
     def ready_items(self) -> list[WorkItem]:
         """Items eligible to be worked right now, stable-sorted by priority then age."""

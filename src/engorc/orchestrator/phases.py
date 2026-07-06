@@ -906,8 +906,21 @@ def phase_build(services: Services, project: Project) -> str:
         if project.gates.open_gates():
             project.set_state("blocked_on_user", reason="waiting on open questions")
             return "waiting on your answers (see `orc inbox`)"
-        project.set_phase("wrap")
-        return "no runnable items remain; wrapping up with what succeeded"
+        if plan.is_complete():
+            project.set_phase("wrap")
+            return "all remaining items are terminal; wrapping up"
+        # Nothing runnable, nothing exhausted, plan not complete: an
+        # inconsistent plan state. Park with a gate — NEVER spin on it.
+        stuck = [shorten(i.title, 60) for i in plan.items_in_status("todo", "blocked")]
+        project.gates.open(
+            question=("The plan is stuck: these items cannot run (their dependencies "
+                      "failed or the plan is inconsistent): " + "; ".join(stuck)
+                      + ". Advise: drop them, or point at the fix."),
+            from_role="supervisor",
+            phase="build",
+        )
+        project.set_state("blocked_on_user", reason="plan has unrunnable items")
+        return "plan is stuck (unrunnable items); asked for your guidance"
 
     ensure_repo(project.workroom)
     from ..agents.toolbox.git import diff_since, head_sha
@@ -960,13 +973,15 @@ def phase_build(services: Services, project: Project) -> str:
 
     diff = diff_since(project.workroom, sha_before)
     if not diff.strip():
-        # "done" with zero file changes is not done — do not waste the panel on it
-        attempt.outcome = "fail"
-        attempt.summary = "finished without changing any files"
-        item.notes.append("previous attempt claimed done but produced no file changes")
-        plan.set_status(item.id, "todo")
-        project.save_plan(plan)
-        return f"implementer produced no changes on '{shorten(item.title, 50)}'; retrying"
+        # No changes, but verification PASSED (we only get here after it did):
+        # the acceptance was already satisfied — e.g. a previous attempt or a
+        # sibling item produced the work. Re-queuing a met item is the loop
+        # the harness must never enter; there is also no diff to review.
+        attempt.summary = "acceptance already satisfied — no changes were needed"
+        item.notes.append("verified as already satisfied; no new changes")
+        sha = _integrate_item(services, project, plan, item)
+        suffix = f" (commit {sha})" if sha else ""
+        return f"'{shorten(item.title, 50)}' was already satisfied — marked done{suffix}"
 
     if config.run.review_required:
         results = run_review_panel(services, project, item, truncate_middle(diff, 24000),

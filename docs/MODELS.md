@@ -7,11 +7,21 @@ download manifest + orc models config); switch by re-running
 
 ## Profiles at a glance
 
+The GB in profile names is **system RAM** (motherboard DRAM) — every profile
+targets the same 12 GB GPU, and nothing ever needs more VRAM than that. MoE
+models keep their expert weights in system RAM (`--n-cpu-moe`) with only
+attention/shared layers and KV cache on the card, which is why DRAM size —
+not VRAM — decides which models you can run.
+
 | Profile | Coder | Planner | Review panel (distinct model families) | Utility | Embeddings | Needs |
 | --- | --- | --- | --- | --- | --- | --- |
-| **balanced-12gb** (default) | Qwen3.6-35B-A3B IQ4_XS (17.7 GB) | same model, thinking on | Qwen3.6 correctness + **gpt-oss-20b** adversarial + **GLM-4.7-Flash** tests | Qwen3.5-4B (2.8 GB) | jina-code-0.5b (1.0 GB, CPU) | 12 GB VRAM + 24 GB WSL RAM |
-| **max-64gb** | Qwen3-Coder-Next 80B-A3B IQ4_XS (42.9 GB) | Qwen3.6-35B-A3B-MTP Q4_K_XL (23.3 GB) | Coder-Next correctness + **GLM-4.7-Flash** adversarial + **Nemotron-Cascade-2** tests | same | same | 48 GB WSL RAM, DDR5 strongly advised |
-| **classic-12gb** | Qwen2.5-Coder-14B Q4_K_M (9.0 GB, dense) | gpt-oss-20b MXFP4 (12.1 GB) | Qwen2.5-Coder correctness + **gpt-oss-20b** adversarial (+ optional GLM third seat) | Qwen3-4B-2507 | Qwen3-Embedding-0.6B | works with 16 GB RAM |
+| **balanced-12gb** (default) | Qwen3.6-35B-A3B IQ4_XS (17.7 GB) | same model, thinking on | Qwen3.6 correctness + **gpt-oss-20b** adversarial + **GLM-4.7-Flash** tests + **Nemotron-3-Nano** architecture | Qwen3.5-4B (2.8 GB) | jina-code-0.5b (1.0 GB, CPU) | 12 GB VRAM + 32 GB system RAM (24 GB to WSL) |
+| **max-64gb-ram** | Qwen3-Coder-Next 80B-A3B IQ4_XS (42.9 GB) | Qwen3.6-35B-A3B-MTP Q4_K_XL (23.3 GB) | Coder-Next correctness + **GLM-4.7-Flash** adversarial + **Nemotron-Cascade-2** tests | same | same | 12 GB VRAM + 64 GB system RAM (48 GB to WSL), DDR5 advised |
+| **classic-12gb** | Qwen2.5-Coder-14B Q4_K_M (9.0 GB, dense) | gpt-oss-20b MXFP4 (12.1 GB) | Qwen2.5-Coder correctness + **gpt-oss-20b** adversarial (+ optional GLM third seat) | Qwen3-4B-2507 | Qwen3-Embedding-0.6B | 12 GB VRAM + 16 GB system RAM |
+
+Only the max profile needs 64 GB of DRAM, and only because of the 80B coder
+(~36 GB of experts must sit in RAM). Everything else — including the default
+four-family review panel — fits a 32 GB machine.
 
 Review panels deliberately span model FAMILIES (Qwen + OpenAI/gpt-oss +
 Zhipu/GLM + NVIDIA/Nemotron): same-weights reviewers are measurably soft on
@@ -19,8 +29,14 @@ their own code, and different lineages catch different bugs. Add seats in
 `~/.eng-orc/config.yaml` (`review.panel`, plus `models.extra` definitions);
 each distinct model costs one swap (~30–60 s) per completed work item, cheap
 against multi-minute build loops. Prefer quality-diverse seats over count —
-beyond three strong families, add lenses (correctness, adversarial,
-security, tests, architecture), not mediocre models.
+beyond the strong families, add lenses (correctness, adversarial, security,
+tests, architecture), not mediocre models.
+
+Model diversity also covers the WRITING side: `run.coder_fallbacks` rotates
+the implementer to a different family after the primary coder's attempts on
+an item fail (balanced: gpt-oss takes attempt 3). Rotation happens only
+between attempts, never mid-attempt — one consistent author owns each try,
+with the previous family's failure evidence in its brief.
 
 ## Why these (mid-2026 snapshot)
 
@@ -53,10 +69,15 @@ security, tests, architecture), not mediocre models.
   Zhipu lineage with entirely different pretraining than Qwen or OpenAI, so
   it catches different bugs. SWE-bench V 59.2, AIME25 91.6, MLA attention
   keeps KV tiny; runs like the other MoEs (experts on CPU, ~6–7 GB GPU).
-- **Nemotron-Cascade-2-30B-A3B** (max profile, NVIDIA lineage) —
-  LiveCodeBench v6 87.2 with olympiad-grade reasoning. Its known weakness
-  (agentic tool use) is irrelevant on the panel: review is a one-shot
-  structured call. Needs ~21 GB host RAM resident, hence max-profile only.
+- **Nemotron-3-Nano-30B-A3B** (default profile, NVIDIA lineage) — the fourth
+  panel family: Mamba2-hybrid MoE, ~16–17 GB at IQ4_NL, community-verified
+  usable on 12 GB cards. Fits the same 32 GB-system-RAM envelope as the
+  other panelists.
+- **Nemotron-Cascade-2-30B-A3B** (max profile, NVIDIA lineage) — Nano's
+  reasoning-maxed sibling: LiveCodeBench v6 87.2, olympiad-grade RL
+  post-training. Its known weakness (agentic tool use) is irrelevant on the
+  panel: review is a one-shot structured call. Needs ~21 GB host RAM
+  resident, hence the 64 GB profile.
 - **Qwen2.5-Coder-14B + gpt-oss-20b** (classic) — the proven-2025 dense
   stack: zero MoE-offload moving parts, mature templates, lowest RAM bar.
   Optional 1.5–2.5× code-gen speedup via the 0.5B draft

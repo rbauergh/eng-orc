@@ -27,6 +27,9 @@ models:
     model: embed
     batch_size: 16
 
+run:
+  coder_fallbacks: [planner]   # gpt-oss-20b takes over a stuck item after the 14B's attempts
+
 review:
   panel:
     - {model_role: coder, lens: correctness}     # Qwen2.5-Coder-14B

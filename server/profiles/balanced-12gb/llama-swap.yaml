@@ -67,6 +67,20 @@ models:
     aliases: ["third-opinion"]
     ttl: 900
 
+  # Nemotron-3-Nano-30B-A3B: fourth review family (NVIDIA lineage),
+  # ~16-17 GB — fits the same 32 GB-system-RAM envelope as the others.
+  # If the downloaded filename differs (quant naming varies), fix the -m
+  # path to match `ls ~/models`.
+  "nemotron-3-nano":
+    name: "Nemotron-3-Nano-30B-A3B (IQ4_NL)"
+    cmd: |
+      ${srv} -m ${models}/Nemotron-3-Nano-30B-A3B-UD-IQ4_NL.gguf
+      --jinja -fa on -c 16384 -ngl 99 --n-cpu-moe 36
+      -ctk q8_0 -ctv q8_0 --mlock
+      --temp 0.6 --top-p 0.95
+    aliases: ["deep-reasoner"]
+    ttl: 900
+
   # jina-code-embeddings-0.5b: SOTA code retrieval at 0.5B. CPU-only (-ngl 0)
   # so it can stay resident forever without costing a byte of VRAM.
   "jina-embed":
@@ -88,7 +102,8 @@ routing:
         gpu:               # one chat model resident at a time on the 12 GB card
           swap: true
           exclusive: true
-          members: ["qwen3.6-35b", "qwen3.5-4b", "gpt-oss-20b", "glm-4.7-flash"]
+          members: ["qwen3.6-35b", "qwen3.5-4b", "gpt-oss-20b", "glm-4.7-flash",
+                    "nemotron-3-nano"]
         cpu-resident:      # chat swaps can never evict the embedder
           persistent: true
           swap: false

@@ -1,8 +1,9 @@
-# model manifest — profile: balanced-12gb (~50 GB)
+# model manifest — profile: balanced-12gb (~66 GB)
 # format: <hf-repo>|<include-pattern>   (lines starting with 'optional ' need --with-optional)
 unsloth/Qwen3.6-35B-A3B-GGUF|Qwen3.6-35B-A3B-UD-IQ4_XS.gguf
 unsloth/Qwen3.5-4B-GGUF|Qwen3.5-4B-UD-Q4_K_XL.gguf
 jinaai/jina-code-embeddings-0.5b-GGUF|jina-code-embeddings-0.5b-F16.gguf
-# review panelists — three distinct model families look at every diff
+# review panelists — FOUR distinct model families look at every diff
 ggml-org/gpt-oss-20b-GGUF|gpt-oss-20b-mxfp4.gguf
 unsloth/GLM-4.7-Flash-GGUF|GLM-4.7-Flash-IQ4_XS.gguf
+unsloth/Nemotron-3-Nano-30B-A3B-GGUF|*UD-IQ4_NL*

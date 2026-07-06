@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # eng-orc one-shot setup for WSL2 Ubuntu on a single NVIDIA GPU.
 #
-#   scripts/setup_wsl.sh [--profile balanced-12gb|max-64gb|classic-12gb]
+#   scripts/setup_wsl.sh [--profile balanced-12gb|max-64gb-ram|classic-12gb]
 #                        [--no-models] [--no-letta] [--no-services]
 #                        [--with-optional]           # also fetch optional models
 #                        [--llama-tag bNNNN]         # llama.cpp build to pin
@@ -198,8 +198,12 @@ profile = yaml.safe_load(profile_path.read_text())
 for key in ("models", "review"):
     if key in profile:
         data[key] = profile[key]
+if "run" in profile:  # profile only sets specific run keys; user tuning survives
+    merged_run = dict(data.get("run") or {})
+    merged_run.update(profile["run"])
+    data["run"] = merged_run
 config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
-print(f"models/review sections set from {profile_path.name}")
+print(f"models/review/run sections set from {profile_path.name}")
 PYEOF
 
 # --- 10. systemd user service for llama-swap ------------------------------------------------------------

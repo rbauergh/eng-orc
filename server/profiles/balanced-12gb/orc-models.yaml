@@ -49,13 +49,29 @@ models:
       top_p: 1.0
       thinking: true
       supports_schema: false
+    deep-reasoner:                  # Nemotron-3-Nano-30B — NVIDIA lineage
+      model: deep-reasoner
+      context_window: 12288
+      max_output_tokens: 4096
+      temperature: 0.6
+      top_p: 0.95
+      thinking: true
+      supports_schema: false
+
+run:
+  # After the primary coder burns its attempts on an item, the next attempt
+  # runs on a different model family: fresh weights, fresh priors on a stuck
+  # problem. (Mid-item switching is deliberately avoided — one consistent
+  # author per attempt.)
+  coder_fallbacks: [second-opinion]
 
 review:
   # Sign-off needs every seat to approve: the builder-family model checks
-  # correctness, and two OTHER model families attack the diff through
+  # correctness, and three OTHER model families attack the diff through
   # different lenses. Distinct weights dodge self-preference bias; distinct
   # lenses dodge redundant opinions.
   panel:
     - {model_role: coder, lens: correctness}           # Qwen3.6
     - {model_role: second-opinion, lens: adversarial}  # gpt-oss-20b
     - {model_role: third-opinion, lens: tests}         # GLM-4.7-Flash
+    - {model_role: deep-reasoner, lens: architecture}  # Nemotron-3-Nano

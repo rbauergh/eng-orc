@@ -93,6 +93,12 @@ class RunConfig(BaseModel):
     max_turns_oneshot_tools: int = 12  # read-only exploration before charter/design
     review_required: bool = True
     compact_after_turns: int = 14  # tool-loop turns before history compaction
+    # Model roles the implementer rotates to once the primary coder's attempts
+    # on an item have failed (fresh weights bring fresh priors to stuck
+    # problems). With max_attempts_per_item=3 and one fallback, attempts run:
+    # coder, coder, fallback. Rotation only ever happens BETWEEN attempts —
+    # within an attempt one consistent author owns the work.
+    coder_fallbacks: list[str] = Field(default_factory=list)
     max_tool_output_chars: int = 6000
     shell_timeout: float = 300.0
     verify_timeout: float = 600.0

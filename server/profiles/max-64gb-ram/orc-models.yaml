@@ -1,6 +1,6 @@
-# models section for the max-64gb profile.
+# models section for the max-64gb-ram profile (64 GB = system RAM, not VRAM).
 models:
-  profile: max-64gb
+  profile: max-64gb-ram
   coder:
     model: coder                    # Qwen3-Coder-Next 80B-A3B (non-thinking, agent-tuned)
     context_window: 24576
@@ -42,6 +42,9 @@ models:
       top_p: 0.95
       thinking: true
       supports_schema: false
+
+run:
+  coder_fallbacks: [third-opinion]   # GLM takes over a stuck item after Coder-Next's attempts
 
 review:
   # Three model families sign off on every diff: the Qwen builder is checked

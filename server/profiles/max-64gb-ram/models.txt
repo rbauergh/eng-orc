@@ -1,4 +1,4 @@
-# model manifest — profile: max-64gb (~110 GB total; needs 64 GB host RAM + fast ext4 disk)
+# model manifest — profile: max-64gb-ram (~110 GB disk; 64 GB SYSTEM RAM + the same 12 GB GPU)
 # format: <hf-repo>|<include-pattern>
 bartowski/Qwen_Qwen3-Coder-Next-GGUF|Qwen_Qwen3-Coder-Next-IQ4_XS.gguf
 havenoammo/Qwen3.6-35B-A3B-MTP-GGUF|Qwen3.6-35B-A3B-MTP-UD-Q4_K_XL.gguf

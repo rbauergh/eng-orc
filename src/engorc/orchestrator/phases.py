@@ -265,6 +265,19 @@ def _needs_tester(item: WorkItem) -> bool:
     return not any(a.role == "tester" and a.outcome == "success" for a in item.attempts)
 
 
+def implementer_model_role(config, prior_failures: int) -> str:
+    """Which model slot writes this attempt. The primary coder gets the early
+    attempts; once those fail, later attempts rotate through coder_fallbacks —
+    a different model family retries with the failure evidence in its brief."""
+    fallbacks = list(config.run.coder_fallbacks)
+    if not fallbacks:
+        return "coder"
+    primary_attempts = max(1, config.run.max_attempts_per_item - len(fallbacks))
+    if prior_failures < primary_attempts:
+        return "coder"
+    return fallbacks[min(prior_failures - primary_attempts, len(fallbacks) - 1)]
+
+
 def _run_item_loop(
     services: Services,
     project: Project,
@@ -274,7 +287,18 @@ def _run_item_loop(
 ) -> tuple[AttemptRecord, AttemptResult]:
     config = services.config
     spec = role(role_name)
-    role_model = model_for_agent(config, role_name)
+    if role_name == "implementer":
+        model_role = implementer_model_role(config, item.open_attempt_count())
+        try:
+            role_model = config.models.for_role(model_role)
+        except KeyError:
+            project.journal.append(
+                Kind.ERROR, actor=role_name, item=item.id,
+                error=f"coder fallback role {model_role!r} not configured; using primary coder",
+            )
+            role_model = config.models.coder
+    else:
+        role_model = model_for_agent(config, role_name)
     attempt = AttemptRecord(role=role_name, model=role_model.model)
     item.attempts.append(attempt)
     item.status = "in_progress"

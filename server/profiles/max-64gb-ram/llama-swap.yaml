@@ -1,6 +1,7 @@
-# llama-swap config — profile: max-64gb
-# Target: RTX 4070 Ti (12 GB) + 64 GB host RAM (DDR5 strongly recommended —
-# MoE decode speed is RAM-bandwidth-bound; enable XMP/EXPO).
+# llama-swap config — profile: max-64gb-ram
+# Target: the SAME 12 GB GPU as every profile, plus 64 GB of SYSTEM RAM
+# (DDR5 strongly recommended — MoE experts live in system RAM and decode is
+# RAM-bandwidth-bound; enable XMP/EXPO). No profile needs more than 12 GB VRAM.
 # Coder: Qwen3-Coder-Next 80B-A3B — ~40 tok/s proven on this GPU class with
 # DDR5-6000. Planner: Qwen3.6-35B-A3B with built-in MTP speculative decoding.
 

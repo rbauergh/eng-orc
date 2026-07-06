@@ -1,10 +1,11 @@
 # Sample %UserProfile%\.wslconfig (WINDOWS side: C:\Users\<you>\.wslconfig).
 # Apply with: wsl --shutdown   (then wait ~8 seconds before relaunching)
 #
-# Sizing guidance for eng-orc's MoE CPU-offload models:
+# Sizing guidance for eng-orc's MoE CPU-offload models (all numbers are
+# SYSTEM RAM — every profile runs on the same 12 GB GPU):
 #   32 GB host → memory=24GB   (fits the balanced-12gb profile)
 #   48 GB host → memory=36GB
-#   64 GB host → memory=48GB   (required for the max-64gb profile)
+#   64 GB host → memory=48GB   (required for the max-64gb-ram profile)
 
 [wsl2]
 memory=24GB

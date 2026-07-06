@@ -414,6 +414,12 @@ def doctor() -> None:
                     f"{seat.model_role} → {seat_model.model}")
             except KeyError:
                 row(f"review seat: {seat.lens}", False, f"unknown model role {seat.model_role!r}")
+        for fallback in config.run.coder_fallbacks:
+            try:
+                fb_model = config.models.for_role(fallback)
+                row(f"coder fallback: {fallback}", fb_model.model in served, fb_model.model)
+            except KeyError:
+                row(f"coder fallback: {fallback}", False, "unknown model role")
         try:
             dim = len(svc.client.embeddings(["ping"], model=config.models.embedder.model)[0])
             row("embeddings", True, f"{config.models.embedder.model} (dim {dim})")

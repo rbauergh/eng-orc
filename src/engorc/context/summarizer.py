@@ -17,7 +17,7 @@ _EVENT_RENDERERS = {
     Kind.PROJECT_CREATED: lambda e: f"project created: {e.payload.get('title', '')}",
     Kind.PHASE_ENTERED: lambda e: f"entered phase {e.payload.get('phase')}",
     Kind.PROJECT_STATE: lambda e: f"state → {e.payload.get('state')} {e.payload.get('reason', '')}".strip(),
-    Kind.ATTEMPT_STARTED: lambda e: f"attempt started by {e.payload.get('role')} on {e.item}",
+    Kind.ATTEMPT_STARTED: lambda e: f"attempt started by {e.actor} on {e.item}",
     Kind.ATTEMPT_FINISHED: lambda e: (
         f"attempt on {e.item}: {e.payload.get('status')} — {shorten(e.payload.get('summary', ''), 140)}"
     ),
@@ -32,7 +32,10 @@ _EVENT_RENDERERS = {
     Kind.COMMIT: lambda e: f"commit {e.payload.get('sha', '')}: {shorten(e.payload.get('message', ''), 100)}",
     Kind.RESUME: lambda e: "project resumed",
     Kind.USER_NOTE: lambda e: f"user note: {shorten(e.payload.get('note', ''), 140)}",
-    Kind.ERROR: lambda e: f"error: {shorten(e.payload.get('error', ''), 160)}",
+    Kind.ERROR: lambda e: (
+        f"error[{e.actor}]: {shorten(e.payload.get('error', ''), 160)}"
+        if e.actor != "system" else f"error: {shorten(e.payload.get('error', ''), 160)}"
+    ),
 }
 
 _NOISE_KINDS = {Kind.AGENT_TURN, Kind.TOOL_CALL, Kind.STRUCTURED_CALL, Kind.STEP, Kind.MODEL_SWAP,

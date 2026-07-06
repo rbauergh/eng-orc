@@ -268,6 +268,36 @@ def _needs_tester(item: WorkItem) -> bool:
     return not any(a.role == "tester" and a.outcome == "success" for a in item.attempts)
 
 
+def _absorb_supervisor_guidance(project: Project, plan: Plan) -> bool:
+    """User answers to the supervisor's stuck-item gate become actionable:
+    failed items get the guidance as notes (with the failed attempts' summaries
+    preserved) and a fresh attempt budget. This is what makes answering the
+    gate meaningfully different from re-running into the same wall."""
+    answers = [g for g in project.unconsumed_answers() if g.from_role == "supervisor"]
+    if not answers:
+        return False
+    changed = False
+    for gate in answers:
+        for item in plan.items:
+            if item.status != "failed":
+                continue
+            for attempt in item.attempts[-2:]:
+                if attempt.summary:
+                    item.notes.append(f"earlier attempt ({attempt.role}): {shorten(attempt.summary, 160)}")
+            item.notes.append(f"user guidance: {shorten(gate.answer, 300)}")
+            item.attempts = []
+            item.status = "todo"
+            item.touch()
+            changed = True
+        project.journal.append(Kind.USER_NOTE, actor="user",
+                               note=f"guidance on stuck items: {gate.answer}")
+        log.info(f"applying your guidance to stuck items: {shorten(gate.answer, 100)}")
+    project.mark_gates_consumed([g.id for g in answers])
+    if changed:
+        project.save_plan(plan)
+    return changed
+
+
 def _handoff_excerpt(handoff_md: str, max_lines: int = 6) -> list[str]:
     """The meat of a handoff note: content lines, headers and blanks dropped."""
     lines = []
@@ -527,6 +557,7 @@ def phase_build(services: Services, project: Project) -> str:
     plan = project.load_plan()
     if supervisor.cleanup_dangling_attempts(plan):
         project.save_plan(plan)
+    _absorb_supervisor_guidance(project, plan)
     if plan.is_complete():
         project.set_phase("wrap")
         return "all work items complete; wrapping up"

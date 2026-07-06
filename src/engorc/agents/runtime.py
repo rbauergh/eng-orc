@@ -74,6 +74,12 @@ class ParsedAction:
 
 def parse_action(text: str) -> ParsedAction:
     text = strip_thinking(text)
+    if not text.strip():
+        raise FormatError(
+            "your reply had no visible content — if you were reasoning, you likely "
+            "spent the whole output budget on it. Answer with a ONE-sentence thought "
+            "and the ACTION line immediately."
+        )
     matches = list(_ACTION_RE.finditer(text))
     if len(matches) == 0:
         raise FormatError(

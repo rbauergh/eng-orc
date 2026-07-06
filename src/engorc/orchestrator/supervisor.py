@@ -23,8 +23,11 @@ def next_phase(project: Project) -> str:
     charter = project.charter()
     if charter is None:
         return "charter"
-    if project.unconsumed_answers():
-        return "charter"  # new user answers always flow through a charter revision
+    # Only the charterer's own questions route back through a charter revision;
+    # answers to supervisor/implementer questions are consumed where they were
+    # asked (stuck-item guidance in build, item briefs during attempts).
+    if any(g.from_role == "charterer" for g in project.unconsumed_answers()):
+        return "charter"
     if not charter.get("ready_to_build", False):
         return "charter"
     if not project.design_path.exists():

@@ -57,13 +57,24 @@ models:
       top_p: 0.95
       thinking: true
       supports_schema: false
+    coder-fallback:                 # gpt-oss-20b tuned for the TOOL LOOP: low
+      model: coder-fast             # reasoning effort so thinking never eats the
+      context_window: 16384         # output budget before the ACTION line
+      max_output_tokens: 3072
+      temperature: 1.0
+      top_p: 1.0
+      thinking: true
+      supports_schema: false
+      extra_body:
+        chat_template_kwargs: {reasoning_effort: low}
 
 run:
   # After the primary coder burns its attempts on an item, the next attempt
   # runs on a different model family: fresh weights, fresh priors on a stuck
   # problem. (Mid-item switching is deliberately avoided — one consistent
-  # author per attempt.)
-  coder_fallbacks: [second-opinion]
+  # author per attempt.) NOTE: this is the low-reasoning tool-loop tuning of
+  # gpt-oss, distinct from its high-reasoning review seat.
+  coder_fallbacks: [coder-fallback]
 
 review:
   # Sign-off needs every seat to approve: the builder-family model checks

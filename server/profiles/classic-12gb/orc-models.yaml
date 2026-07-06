@@ -27,8 +27,20 @@ models:
     model: embed
     batch_size: 16
 
+  extra:
+    coder-fallback:              # gpt-oss-20b tuned for the tool loop (low reasoning
+      model: planner             # effort — high effort can spend the whole output
+      context_window: 16384      # budget thinking before emitting the ACTION line)
+      max_output_tokens: 3072
+      temperature: 1.0
+      top_p: 1.0
+      thinking: true
+      supports_schema: false
+      extra_body:
+        chat_template_kwargs: {reasoning_effort: low}
+
 run:
-  coder_fallbacks: [planner]   # gpt-oss-20b takes over a stuck item after the 14B's attempts
+  coder_fallbacks: [coder-fallback]
 
 review:
   panel:

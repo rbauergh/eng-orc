@@ -10,6 +10,7 @@ enough to commit and push.
 from __future__ import annotations
 
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -95,7 +96,41 @@ def gather_rows(svc, config: Config) -> tuple[list[Row], list[str]]:
     row("memory", ok_memory, detail)
     row("nvidia-smi", (shutil.which("nvidia-smi") is not None) or None,
         "GPU visibility (informational)")
+
+    # A configured model whose GGUF is missing dies with an opaque
+    # "upstream command exited prematurely" at load time — catch it here.
+    for model_id, path in _llama_swap_model_files():
+        row(f"model file: {model_id}", path.exists(),
+            str(path) if path.exists()
+            else f"MISSING {path} — download it or fix the -m filename in the llama-swap config")
     return rows, unlisted
+
+
+def _llama_swap_model_files(config_path: Path | None = None) -> list[tuple[str, Path]]:
+    """(model_id, gguf_path) pairs parsed from the llama-swap config, with
+    ${env.HOME} and user macros expanded. Best-effort: empty on any surprise."""
+    config_path = config_path or Path.home() / ".config" / "llama-swap" / "config.yaml"
+    if not config_path.exists():
+        return []
+    try:
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+    home = str(Path.home())
+    macros = {}
+    for name, value in (data.get("macros") or {}).items():
+        macros[str(name)] = str(value).replace("${env.HOME}", home)
+    out: list[tuple[str, Path]] = []
+    for model_id, spec in (data.get("models") or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        cmd = str(spec.get("cmd", "")).replace("${env.HOME}", home)
+        for name, value in macros.items():
+            cmd = cmd.replace("${" + name + "}", value)
+        match = re.search(r"-m\s+(\S+)", cmd)
+        if match:
+            out.append((str(model_id), Path(match.group(1))))
+    return out
 
 
 UNLISTED_NOTE = (
@@ -156,11 +191,12 @@ def build_report(svc, config: Config) -> str:
         parts += ["", "Unlisted (warn) names: " + "; ".join(unlisted)]
 
     gpu_lines = _run(["nvidia-smi", "-L"]).splitlines()
+    swap_binary = shutil.which("llama-swap") or str(Path.home() / ".local" / "bin" / "llama-swap")
     parts += [
         "",
         "## Versions",
         f"- llama.cpp tag: {_read(Path.home() / 'llama.cpp' / 'build' / '.engorc-tag')}",
-        f"- llama-swap: {shorten(_run(['llama-swap', '--version']), 120)}",
+        f"- llama-swap: {shorten(_run([swap_binary, '--version']), 120)}",
         f"- gpu: {shorten(gpu_lines[0], 120) if gpu_lines else '(none reported)'}",
         "",
         "## Config (secrets redacted)",

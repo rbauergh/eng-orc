@@ -49,7 +49,7 @@ def _turn_line(e: Event) -> str:
 EVENT_LINES = {
     Kind.STEP: lambda e: f"step [{e.payload.get('phase')}] {e.payload.get('note', '')}",
     Kind.AGENT_TURN: _turn_line,
-    Kind.ATTEMPT_STARTED: lambda e: f"{e.payload.get('role')} started on {e.item}",
+    Kind.ATTEMPT_STARTED: lambda e: f"{e.actor} started on {e.item}",
     Kind.ATTEMPT_FINISHED: lambda e: (
         f"{e.actor} {e.payload.get('status')}: {shorten(e.payload.get('summary', ''), 70)}"
     ),
@@ -65,7 +65,10 @@ EVENT_LINES = {
     Kind.PHASE_ENTERED: lambda e: f"phase → {e.payload.get('phase')}",
     Kind.PROJECT_STATE: lambda e: f"state → {e.payload.get('state')}",
     Kind.INDEX_REFRESH: lambda e: f"index refreshed ({e.payload.get('nodes_upserted', 0)} chunks)",
-    Kind.ERROR: lambda e: f"ERROR: {shorten(str(e.payload.get('error', '')), 80)}",
+    Kind.ERROR: lambda e: (
+        f"ERROR[{e.actor}]: {shorten(str(e.payload.get('error', '')), 80)}"
+        if e.actor != "system" else f"ERROR: {shorten(str(e.payload.get('error', '')), 80)}"
+    ),
 }
 
 
@@ -266,11 +269,24 @@ def _projects_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
     return tuple(s.projects), Panel(table, title="projects", title_align="left")
 
 
+def _idle_reason(s: Snapshot) -> str:
+    """An idle GPU should always come with its explanation."""
+    if s.open_gates:
+        return (f"[yellow]idle — waiting on YOU: {s.open_gates} open question(s) "
+                f"(orc inbox → orc answer)[/yellow]")
+    if not s.projects:
+        return '[dim]idle — no projects (orc new "<goal>")[/dim]'
+    states = {row[3] for row in s.projects}
+    if "active" not in states:
+        return f"[dim]idle — no active projects ({', '.join(sorted(states))})[/dim]"
+    return "[dim]idle — active projects but no attempt in flight (is `orc run --watch` running?)[/dim]"
+
+
 def _now_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
     text = "\n".join(
         f"[bold]{escape(line.slug)}[/bold] · {escape(line.text)}" for line in s.now
-    ) or "[dim]idle — no attempt in flight[/dim]"
-    key = tuple((line.slug, line.text) for line in s.now)
+    ) or _idle_reason(s)
+    key = tuple((line.slug, line.text) for line in s.now) or (text,)
     return key, Panel(_nowrap(text), title="working now", title_align="left")
 
 

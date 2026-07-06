@@ -45,8 +45,18 @@ config has drifted from the repo profile; `orc sync` is always the fix.
 ## Daily driving
 
 ```bash
-orc new "Build a small FastAPI service that ..."     # greenfield
+orc new "Build a small FastAPI service that ..."     # greenfield one-liner
+orc new                                              # intake conversation: builds a
+                                                     # spec doc turn by turn; deferred
+                                                     # answers ("whatever you want")
+                                                     # get decided and recorded
+orc new --doc ~/notes/idea.md                        # seed the mission from a document
+orc new -i --doc ~/notes/idea.md                     # ...and refine it in conversation
 orc new "Add rate limiting to my API" --repo ~/code/myapi   # existing repo
+orc request notes-api "bug: crashes on empty title"  # continue a project: plans new
+                                                     # verifiable items, reactivates
+                                                     # wrapped projects (-i to shape
+                                                     # bigger asks in conversation)
 orc run --watch          # work everything; Ctrl-C any time — state is on disk
 orc run --watch -i       # …and answer questions inline the moment work parks
 orc status               # all projects: phase, plan progress, waiting gates

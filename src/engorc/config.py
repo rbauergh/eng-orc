@@ -103,6 +103,16 @@ class RunConfig(BaseModel):
     # (diagnose from the evidence, then revise/split/drop/retry it) before
     # the question escalates to the user.
     triage_rounds: int = 2
+    # The TDD cycle: "auto" trusts the planner's per-item test_first judgment;
+    # "always" forces tester-before-implementer on every feature/fix/refactor;
+    # "never" disables the tester stage entirely.
+    test_first: Literal["auto", "always", "never"] = "auto"
+    # Review the tester's output on its own (tests lens) BEFORE implementation
+    # starts — bad behavioral specs get caught before code is built to them.
+    review_tests: bool = True
+    # Round cap for the interactive project-definition conversation (orc new -i);
+    # at the cap the model finalizes the spec under recorded assumptions.
+    intake_rounds: int = 10
     max_tool_output_chars: int = 6000
     shell_timeout: float = 300.0
     verify_timeout: float = 600.0
@@ -311,6 +321,8 @@ run:
   max_attempts_per_item: 3
   max_turns_coder: 40
   review_required: true
+  test_first: auto                       # auto | always (strict TDD) | never
+  review_tests: true                     # review the tester's tests before implementation
 
 review:
   # Every panelist reviews each completed item; ALL must approve to sign off.

@@ -272,8 +272,20 @@ def build_report(svc, config: Config) -> str:
         yaml.safe_dump(redact(config.model_dump(mode="json")), sort_keys=False).strip(),
         "```",
         "",
-        "## Projects",
+        "## GPU",
     ]
+    try:
+        svc.observe_gpu()
+        for entry in svc.timeline.current():
+            parts.append(f"- resident: {entry['model']} ({entry['state']})")
+            if entry["state"] == "ready":
+                parts.append(f"  slots: {svc.swap.raw_slots(entry['model'])}")
+        for event in svc.timeline.recent(8):
+            parts.append(f"- {svc.timeline.describe(event)}")
+    except Exception as exc:
+        parts.append(f"(gpu section unavailable: {exc})")
+
+    parts += ["", "## Projects"]
     try:
         projects = svc.registry.all_projects()
     except Exception as exc:

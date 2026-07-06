@@ -23,6 +23,7 @@ from ..fsio import append_jsonl, atomic_write_json, flocked, iter_jsonl, read_js
 from ..util import human_duration, iso_now, parse_iso
 
 _READY_STATES = ("ready", "running", "loaded")
+_STOPPING_STATES = ("stopping", "stopped", "shutdown", "shuttingdown", "stop")
 
 
 def _normalize(running: list[dict]) -> dict[str, str]:
@@ -31,8 +32,13 @@ def _normalize(running: list[dict]) -> dict[str, str]:
         model = entry.get("model")
         if not model:
             continue
-        raw = (entry.get("state") or "").lower()
-        states[model] = "ready" if (raw in _READY_STATES or raw == "") else "loading"
+        raw = (entry.get("state") or "").lower().replace("_", "").replace("-", "")
+        if raw in _READY_STATES or raw == "":
+            states[model] = "ready"
+        elif raw in _STOPPING_STATES:
+            states[model] = "stopping"
+        else:
+            states[model] = "loading"
     return states
 
 
@@ -70,6 +76,12 @@ class GpuTimeline:
                 changed = True
             for model, state in states.items():
                 prior = previous.get(model)
+                if state == "stopping":
+                    # a normal shutdown in progress is NOT a new load: keep the
+                    # prior record so the eventual disappearance is accounted
+                    # as unloaded-with-residency (not a bogus "aborted")
+                    current[model] = prior or {"state": "ready", "since": now}
+                    continue
                 if prior is None:
                     append_jsonl(self.log_path, {"ts": now, "model": model, "event": "loading"}
                                  if state == "loading"

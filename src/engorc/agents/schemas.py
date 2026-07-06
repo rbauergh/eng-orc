@@ -99,6 +99,22 @@ class ReviewVerdict(BaseModel):
         return [f for f in self.findings if f.severity in ("blocker", "major")]
 
 
+class IntakeTurn(BaseModel):
+    """One round of the project-definition conversation (orc new -i)."""
+
+    reasoning: str
+    title: str = Field(description="short working title for the project")
+    spec_markdown: str = Field(
+        description="the COMPLETE current spec document — carry all prior sections "
+        "forward, updated with what was just learned or decided"
+    )
+    question: str = Field(
+        description="the single next question for the user; empty when ready. Only "
+        "questions that materially shape the project — never trivia"
+    )
+    ready: bool = Field(description="true when the spec suffices to charter the project")
+
+
 class ItemTriage(BaseModel):
     item_id: str
     action: Literal["revise", "split", "drop", "retry", "ask_user"]

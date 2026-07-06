@@ -14,8 +14,10 @@ Rules:
   project's real test command; an empty list means the project default).
 - First items build the skeleton (project scaffolding, core types); later
   items add behavior; final items integrate and polish docs.
-- test_first = true for behavior-bearing items where writing the failing test
-  first is natural; false for scaffolding/docs/chores.
+- TDD is the default for behavior: any item whose acceptance describes what
+  code DOES gets test_first = true, pytest-style tests named in its
+  acceptance, and the project's test command in verify_commands. Only pure
+  scaffolding, docs, and chores skip the tester (test_first = false).
 - files_hint lists the files the implementer will most likely touch.
 - Plan the MINIMUM number of items that delivers the charter's success
   criteria. Three good items beat eight vague ones.

@@ -85,10 +85,35 @@ class SwapServer:
                 names.add(model)
         return names
 
-    def slot_activity(self, model: str) -> tuple[int, int] | None:
-        """(busy_slots, tokens_decoded_in_flight) for a loaded model, from the
-        upstream llama-server /slots endpoint. None when unavailable — slot
-        JSON shape varies across versions, so parsing is defensive."""
+    _DECODE_KEYS = ("n_decoded", "tokens_predicted", "n_predicted", "tokens_evaluated_predicted")
+    _PROMPT_KEYS = ("n_past", "n_prompt_tokens", "n_prompt_tokens_processed", "prompt_n", "n_ctx_used")
+
+    @classmethod
+    def _slot_numbers(cls, slot: dict) -> tuple[int, int]:
+        """(decoded, prompt) token counts scavenged from a slot object —
+        field names vary across llama-server versions and may be nested."""
+        decoded = prompt = 0
+
+        def scan(node: dict) -> None:
+            nonlocal decoded, prompt
+            for key, value in node.items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    lowered = key.lower()
+                    if lowered in cls._DECODE_KEYS:
+                        decoded = max(decoded, int(value))
+                    elif lowered in cls._PROMPT_KEYS:
+                        prompt = max(prompt, int(value))
+                elif isinstance(value, dict):
+                    scan(value)
+
+        scan(slot)
+        return decoded, prompt
+
+    def slot_activity(self, model: str) -> tuple[int, int, int] | None:
+        """(busy_slots, decoded_tokens, prompt_tokens) for a loaded model from
+        the upstream /slots endpoint. Distinguishing decode from prefill
+        matters: a long prefill shows zero decoded tokens while the GPU is
+        working flat out. None when the endpoint is unavailable."""
         try:
             resp = self._http.get(f"/upstream/{model}/slots")
             if resp.status_code != 200:
@@ -98,8 +123,7 @@ class SwapServer:
             return None
         if not isinstance(data, list):
             return None
-        busy = 0
-        tokens = 0
+        busy = decoded = prompt = 0
         for slot in data:
             if not isinstance(slot, dict):
                 continue
@@ -110,12 +134,22 @@ class SwapServer:
             if not processing:
                 continue
             busy += 1
-            for key in ("n_decoded", "tokens_predicted", "n_past"):
-                value = slot.get(key)
-                if isinstance(value, (int, float)) and value > 0:
-                    tokens += int(value)
-                    break
-        return busy, tokens
+            slot_decoded, slot_prompt = self._slot_numbers(slot)
+            decoded += slot_decoded
+            prompt += slot_prompt
+        return busy, decoded, prompt
+
+    def raw_slots(self, model: str, max_chars: int = 1500) -> str:
+        """Raw slot JSON for diagnostics reports (parsing gaps become visible)."""
+        import json as _json
+
+        try:
+            resp = self._http.get(f"/upstream/{model}/slots")
+            if resp.status_code != 200:
+                return f"(status {resp.status_code})"
+            return _json.dumps(resp.json())[:max_chars]
+        except (httpx.HTTPError, ValueError) as exc:
+            return f"(unavailable: {exc})"
 
     def unload_all(self) -> bool:
         """Frees VRAM (e.g. before the user wants the GPU for something else)."""

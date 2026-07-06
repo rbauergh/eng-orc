@@ -126,21 +126,76 @@ def sync(
 
 @app.command()
 def new(
-    goal: str = typer.Argument(..., help="the mission, in plain language"),
-    title: str | None = typer.Option(None, help="short display title (default: first line of goal)"),
+    goal: str | None = typer.Argument(None, help="the mission in plain language; omit for a conversation"),
+    doc: Path | None = typer.Option(None, help="seed the mission from a spec/notes document"),
+    interactive: bool = typer.Option(False, "--interactive", "-i",
+                                     help="define the project in a back-and-forth that builds a spec"),
+    title: str | None = typer.Option(None, help="short display title (default: derived)"),
     slug: str | None = typer.Option(None, help="directory slug (default: derived from title)"),
     repo: Path | None = typer.Option(None, help="attach an EXISTING code repository as the workroom"),
     priority: int = typer.Option(3, min=1, max=5, help="1 = urgent … 5 = someday"),
     tag: list[str] = typer.Option([], help="freeform tags"),
 ) -> None:
-    """Start a new project from a goal."""
+    """Start a project: from a one-liner, a seed document, or an intake conversation."""
     if repo is not None and not repo.is_dir():
         raise typer.BadParameter(f"--repo does not exist: {repo}")
-    project = services().registry.create(
-        goal, title=title, slug=slug, workroom=repo, priority=priority, tags=list(tag)
-    )
+    if doc is not None and not doc.is_file():
+        raise typer.BadParameter(f"--doc does not exist: {doc}")
+    svc = services()
+    create_kwargs = dict(slug=slug, workroom=repo, priority=priority, tags=list(tag))
+
+    seed_parts = [p for p in (doc.read_text(encoding="utf-8") if doc else None, goal) if p]
+    seed = "\n\n".join(seed_parts) or None
+    if interactive or (goal is None and doc is None):
+        if not log.console.is_terminal:
+            raise typer.BadParameter("interactive intake needs a terminal — pass a goal or --doc")
+        from .intake import create_project_from_intake, run_intake
+
+        result = run_intake(svc, seed=seed)
+        if result is None:
+            log.info("intake abandoned — nothing created")
+            raise typer.Exit(0)
+        project = create_project_from_intake(svc, result, **create_kwargs)
+    else:
+        mission = seed or ""
+        project = svc.registry.create(mission, title=title, **create_kwargs)
     log.success(f"created project [bold]{project.root.name}[/bold] at {project.root}")
     log.info("run it with: orc run " + project.root.name)
+
+
+@app.command()
+def request(
+    project: str,
+    text: str | None = typer.Argument(None, help="the bug fix / feature request; omit for a conversation"),
+    interactive: bool = typer.Option(False, "--interactive", "-i",
+                                     help="shape the request in a back-and-forth first"),
+) -> None:
+    """Queue a bug fix or feature request onto an existing project — the natural
+    way to keep working on something already built (reactivates wrapped projects)."""
+    svc = services()
+    proj = svc.registry.get(project)
+    if interactive or text is None:
+        if not log.console.is_terminal:
+            raise typer.BadParameter("interactive request needs a terminal — pass the request text")
+        from .intake import run_intake
+
+        design = proj.design_path.read_text(encoding="utf-8") if proj.design_path.exists() else ""
+        seed = "\n\n".join(p for p in (
+            text,
+            f"(This is a change request for the EXISTING project '{proj.meta.title}'. "
+            f"Existing design follows — spec only the change.)\n\n{design}",
+        ) if p)
+        result = run_intake(svc, seed=seed)
+        if result is None:
+            log.info("request abandoned — nothing queued")
+            raise typer.Exit(0)
+        text = result.spec_markdown
+    proj.append_mission_note(text)
+    from .orchestrator.phases import plan_request
+
+    note = plan_request(svc, proj, text)
+    log.success(note)
+    log.info(f"run it with: orc run {proj.root.name}")
 
 
 @app.command()

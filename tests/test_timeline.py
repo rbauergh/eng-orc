@@ -44,6 +44,39 @@ def test_observe_derives_load_ready_unload_with_durations(tmp_path, monkeypatch)
     assert "unloaded after 40m00s" in described[2]
 
 
+def test_normal_shutdown_is_unloaded_not_aborted(tmp_path, monkeypatch):
+    """Regression: llama-swap reports a 'stopping' state during a normal
+    unload; that must not be misread as a new load that then 'aborted'."""
+    clock = FakeClock()
+    monkeypatch.setattr(timeline_module, "iso_now", clock)
+    timeline = GpuTimeline(tmp_path)
+
+    timeline.observe([{"model": "glm", "state": "ready"}])
+    clock.now = "2026-07-06T10:30:00+00:00"
+    timeline.observe([{"model": "glm", "state": "stopping"}])
+    clock.now = "2026-07-06T10:30:05+00:00"
+    timeline.observe([])
+
+    events = [(e["model"], e["event"]) for e in timeline.recent(10)]
+    assert events == [("glm", "ready"), ("glm", "unloaded")]
+    unloaded = timeline.recent(10)[-1]
+    assert unloaded["resident_seconds"] == 1805.0  # measured from ready, through stopping
+
+
+def test_slot_numbers_scavenges_nested_fields():
+    from engorc.llm.server import SwapServer
+
+    slot = {
+        "id": 0,
+        "is_processing": True,
+        "next_token": {"n_decoded": 231, "has_next_token": True},
+        "prompt_progress": {"n_past": 8123},
+    }
+    decoded, prompt = SwapServer._slot_numbers(slot)
+    assert decoded == 231
+    assert prompt == 8123
+
+
 def test_observe_is_idempotent_when_nothing_changes(tmp_path, monkeypatch):
     clock = FakeClock()
     monkeypatch.setattr(timeline_module, "iso_now", clock)

@@ -161,7 +161,13 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
             continue
         activity = services.swap.slot_activity(entry["model"])
         if activity and activity[0] > 0:
-            busy_bits.append(f"{entry['model']}: generating (~{activity[1]} tok in flight)")
+            _, decoded, prompt = activity
+            if decoded > 0:
+                busy_bits.append(f"{entry['model']}: generating (~{decoded} tok)")
+            elif prompt > 0:
+                busy_bits.append(f"{entry['model']}: prefilling (~{prompt} ctx tok read)")
+            else:
+                busy_bits.append(f"{entry['model']}: busy (prefill or long generation)")
     snapshot.gpu_live = " · ".join(busy_bits) or "idle"
 
     tokens_in = tokens_out = 0
@@ -197,7 +203,19 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
             tokens_in += int(event.payload.get("prompt_tokens", 0) or 0)
             tokens_out += int(event.payload.get("completion_tokens", 0) or 0)
 
-    snapshot.gpu_io = f"last 5m: {tokens_in:,} tok in / {tokens_out:,} tok out"
+    snapshot.gpu_io = f"completed calls last 5m: {tokens_in:,} tok in / {tokens_out:,} tok out"
+    # A single long call journals nothing until it finishes — say so instead
+    # of letting "busy" and "0 tokens" sit next to each other unexplained.
+    if merged and snapshot.gpu_live != "idle":
+        last_ts = max(entry[0] for entry in merged)
+        try:
+            from ..util import parse_iso
+
+            silent = (utc_now() - parse_iso(last_ts)).total_seconds()
+            if silent > 45:
+                snapshot.gpu_io += f" · current call running ≥{human_duration(silent)}"
+        except ValueError:
+            pass
     merged.sort(key=lambda entry: entry[0])
     expand_limit = None if details else 2
     for ts, slug, event in merged[-16:]:

@@ -201,7 +201,10 @@ def phase_design(services: Services, project: Project) -> str:
 # --------------------------------------------------------------------------- plan
 
 
-def _draft_to_plan(draft: PlanDraft) -> Plan:
+_TESTABLE_KINDS = ("feature", "fix", "refactor")
+
+
+def _draft_to_plan(draft: PlanDraft, test_policy: str = "auto") -> Plan:
     items: list[WorkItem] = []
     for entry in draft.items:
         items.append(
@@ -221,7 +224,12 @@ def _draft_to_plan(draft: PlanDraft) -> Plan:
             if 0 <= dep_index < len(items) and dep_index != index:
                 deps.append(items[dep_index].id)
         items[index].depends_on = deps
-        if entry.test_first:
+        test_first = entry.test_first
+        if test_policy == "always" and entry.kind in _TESTABLE_KINDS:
+            test_first = True
+        elif test_policy == "never":
+            test_first = False
+        if test_first:
             items[index].notes.append("test_first")
     plan = Plan(goal_recap=draft.goal_recap, items=items)
     return plan
@@ -244,7 +252,7 @@ def phase_plan(services: Services, project: Project) -> str:
         except StructuredError as exc:
             project.journal.append(Kind.ERROR, actor="planner", error=str(exc)[:500])
             return "plan attempt failed validation; will retry next visit"
-        plan = _draft_to_plan(draft)
+        plan = _draft_to_plan(draft, config.run.test_first)
         problems = plan.validate_graph()
         if not plan.items:
             problems.append("the plan has zero items")
@@ -258,6 +266,66 @@ def phase_plan(services: Services, project: Project) -> str:
         errors = problems
     project.journal.append(Kind.ERROR, actor="planner", error=f"plan invalid twice: {errors}")
     return "planner produced an invalid plan twice; will retry next visit"
+
+
+def plan_request(services: Services, project: Project, request_text: str) -> str:
+    """Extend an existing project's plan with items for a new bug fix or
+    feature request (the natural continuation path). Reactivates wrapped
+    projects: a living codebase is never 'done', only quiet."""
+    import yaml as _yaml
+
+    config = services.config
+    plan = project.load_plan()
+    existing = "\n".join(f"- [{i.status}] {i.title}" for i in plan.items) or "(no items yet)"
+    system = load_prompt("planner.md") + (
+        "\n## Mode\nYou are EXTENDING an existing project's plan with new items for the "
+        "user's request. Do not restate or duplicate existing items; depends_on indices "
+        "refer only to YOUR new items; reuse the established stack and conventions."
+    )
+    sections = [
+        Section(name="New request from the user", text=request_text, priority=1),
+        Section(name="Existing plan (context only — add new items, never duplicates)",
+                text=existing, priority=2),
+        Section(name="Charter",
+                text=_yaml.safe_dump(project.charter(), sort_keys=False) if project.charter() else "",
+                priority=3),
+        Section(name="Design",
+                text=project.design_path.read_text(encoding="utf-8")
+                if project.design_path.exists() else "", priority=3, truncate="middle"),
+        Section(name="Repository map",
+                text=briefs._repomap_text(services, project), priority=4),
+    ]
+    try:
+        draft = one_shot_structured(
+            services.caller(project.journal, "planner"),
+            model_for_agent(config, "planner"),
+            PlanDraft,
+            system,
+            sections,
+        )
+    except StructuredError as exc:
+        project.journal.append(Kind.ERROR, actor="planner", error=str(exc)[:400])
+        return "the planner failed to turn the request into work items — try rephrasing"
+    new_items = _draft_to_plan(draft, config.run.test_first).items
+    if not new_items:
+        return "the planner produced no items for this request — try being more specific"
+    for item in new_items:
+        item.notes.append(f"request: {shorten(request_text.splitlines()[0], 120)}")
+    plan.add_items(new_items)
+    problems = plan.validate_graph()
+    if problems:
+        project.journal.append(Kind.ERROR, actor="planner", error=f"request plan invalid: {problems}")
+        return f"the planner produced an invalid extension ({problems[0]}) — try again"
+    project.save_plan(plan)
+
+    meta = project.meta
+    if meta.phase in ("wrap", "done") or meta.state == "done":
+        project.set_phase("build")
+    project.set_state("active", reason="new request queued")
+    project.journal.append(Kind.USER_NOTE, actor="user",
+                           note=f"request: {shorten(request_text, 300)}")
+    titles = ", ".join(shorten(i.title, 40) for i in new_items[:4])
+    return f"queued {len(new_items)} new item(s): {titles}"
 
 
 # --------------------------------------------------------------------------- build
@@ -395,7 +463,8 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
             acted += 1
         elif entry.action == "split" and entry.split_items:
             replacements = _draft_to_plan(
-                PlanDraft(reasoning="", goal_recap="", items=entry.split_items)
+                PlanDraft(reasoning="", goal_recap="", items=entry.split_items),
+                config.run.test_first,
             ).items
             previous = None
             for replacement in replacements:
@@ -593,6 +662,76 @@ def _review_sections(project: Project, item: WorkItem, diff: str) -> list[Sectio
     ]
 
 
+def _review_one_seat(
+    services: Services,
+    project: Project,
+    item: WorkItem,
+    diff: str,
+    seat: PanelReviewer,
+    artifact_name: str,
+    stage: str = "code",
+) -> tuple[str, ReviewVerdict] | None:
+    """One reviewer, one verdict: journaled, narrated, archived. Returns
+    (model, verdict) or None when the seat is unavailable — a dead reviewer
+    must never wedge the pipeline."""
+    from ..agents.roles import REVIEW_LENSES
+
+    config = services.config
+    actor = f"reviewer:{seat.lens}@{seat.model_role}"
+    try:
+        role_model = config.models.for_role(seat.model_role)
+    except KeyError as exc:
+        project.journal.append(Kind.ERROR, actor=actor, item=item.id,
+                               error=f"panel seat skipped: {exc}")
+        return None
+    lens_text = REVIEW_LENSES.get(seat.lens, REVIEW_LENSES["correctness"])
+    system = load_prompt("reviewer.md") + "\n## Your lens for this review\n" + lens_text
+    if stage == "tests":
+        system += (
+            "\n## Stage note\nYou are reviewing ONLY the tests, before any implementation "
+            "exists. Judge whether they encode the acceptance criteria faithfully: failing "
+            "now is expected and correct; weak assertions, permutation spam, or tests that "
+            "mirror a guessed implementation instead of the required behavior are blockers."
+        )
+    log.agent(actor, f"reviewing {'tests for ' if stage == 'tests' else ''}"
+                     f"'{shorten(item.title, 50)}' on {role_model.model} …")
+    try:
+        verdict = one_shot_structured(
+            services.caller(project.journal, actor),
+            role_model,
+            ReviewVerdict,
+            system,
+            _review_sections(project, item, diff),
+        )
+    except Exception as exc:
+        project.journal.append(Kind.ERROR, actor=actor, item=item.id,
+                               error=f"panel seat unavailable: {str(exc)[:300]}")
+        return None
+    blocker_lines = [
+        f"{f.category}/{f.severity}: {shorten(f.description, 120)} → {shorten(f.recommendation, 80)}"
+        for f in verdict.blockers()
+    ]
+    project.journal.append(
+        Kind.REVIEW, item=item.id, verdict=verdict.verdict,
+        findings=len(verdict.findings), lens=seat.lens, model=role_model.model,
+        blockers=blocker_lines, stage=stage,
+    )
+    log.agent(actor, f"{verdict.verdict} — {len(verdict.findings)} finding(s): "
+                     f"{shorten(verdict.summary, 90)}")
+    for line in blocker_lines:
+        log.info(f"    ↳ {line}")
+    services.observe_gpu()  # panel seats are where swaps happen mid-step
+    review_md = [f"# Review ({stage}) — {verdict.verdict}",
+                 f"_lens: {seat.lens} · model: {role_model.model}_", "", verdict.summary, ""]
+    for finding in verdict.findings:
+        review_md.append(
+            f"- **{finding.category}/{finding.severity}** {finding.description}"
+            f" → {finding.recommendation}"
+        )
+    project.artifacts.write(artifact_name, "\n".join(review_md), subdir=f"attempts/{item.id}")
+    return role_model.model, verdict
+
+
 def run_review_panel(
     services: Services, project: Project, item: WorkItem, diff: str
 ) -> list[tuple[PanelReviewer, str, ReviewVerdict]]:
@@ -600,59 +739,58 @@ def run_review_panel(
     failure modes a single (self-preferring) model misses. A panelist whose
     model is unreachable or whose verdict fails validation is skipped with a
     journal record — the surviving panel decides."""
-    from ..agents.roles import REVIEW_LENSES
-
     config = services.config
     panel = config.review.panel or [PanelReviewer()]
     results: list[tuple[PanelReviewer, str, ReviewVerdict]] = []
     for seat_no, seat in enumerate(panel, 1):
-        actor = f"reviewer:{seat.lens}@{seat.model_role}"
-        try:
-            role_model = config.models.for_role(seat.model_role)
-        except KeyError as exc:
-            project.journal.append(Kind.ERROR, actor=actor, item=item.id,
-                                   error=f"panel seat skipped: {exc}")
-            continue
-        lens_text = REVIEW_LENSES.get(seat.lens, REVIEW_LENSES["correctness"])
-        system = load_prompt("reviewer.md") + "\n## Your lens for this review\n" + lens_text
-        try:
-            verdict = one_shot_structured(
-                services.caller(project.journal, actor),
-                role_model,
-                ReviewVerdict,
-                system,
-                _review_sections(project, item, diff),
-            )
-        except Exception as exc:  # one dead panelist must not wedge the pipeline
-            project.journal.append(Kind.ERROR, actor=actor, item=item.id,
-                                   error=f"panel seat unavailable: {str(exc)[:300]}")
-            continue
-        blocker_lines = [
-            f"{f.category}/{f.severity}: {shorten(f.description, 120)} → {shorten(f.recommendation, 80)}"
-            for f in verdict.blockers()
-        ]
-        project.journal.append(
-            Kind.REVIEW, item=item.id, verdict=verdict.verdict,
-            findings=len(verdict.findings), lens=seat.lens, model=role_model.model,
-            blockers=blocker_lines,
+        outcome = _review_one_seat(
+            services, project, item, diff, seat,
+            artifact_name=f"review-{seat_no}-{seat.lens}.md",
         )
-        log.agent(actor, f"{verdict.verdict} — {len(verdict.findings)} finding(s): "
-                         f"{shorten(verdict.summary, 90)}")
-        for line in blocker_lines:
-            log.info(f"    ↳ {line}")
-        services.observe_gpu()  # panel seats are where swaps happen mid-step
-        review_md = [f"# Review — {verdict.verdict}",
-                     f"_lens: {seat.lens} · model: {role_model.model}_", "", verdict.summary, ""]
-        for finding in verdict.findings:
-            review_md.append(
-                f"- **{finding.category}/{finding.severity}** {finding.description}"
-                f" → {finding.recommendation}"
-            )
-        project.artifacts.write(
-            f"review-{seat_no}-{seat.lens}.md", "\n".join(review_md), subdir=f"attempts/{item.id}"
-        )
-        results.append((seat, role_model.model, verdict))
+        if outcome is not None:
+            results.append((seat, outcome[0], outcome[1]))
     return results
+
+
+def _tests_seat(config) -> PanelReviewer:
+    for seat in config.review.panel:
+        if seat.lens == "tests":
+            return seat
+    return PanelReviewer(model_role="coder", lens="tests")
+
+
+def review_tests(
+    services: Services, project: Project, item: WorkItem, attempt: AttemptRecord, sha_before: str
+) -> str | None:
+    """The TDD gate: the tester's behavioral tests get their own review before
+    any implementation is built to them. Returns a step note when the tests
+    were rejected (or absent); None means proceed to implementation."""
+    from ..agents.toolbox.git import diff_since
+
+    diff = truncate_middle(diff_since(project.workroom, sha_before), 20000)
+    if not diff.strip():
+        attempt.outcome = "fail"
+        attempt.summary = "tester finished without writing any tests"
+        item.notes.append("tester claimed done but produced no test changes")
+        return f"tester produced no test changes on '{shorten(item.title, 50)}'; retrying"
+    seat = _tests_seat(services.config)
+    outcome = _review_one_seat(
+        services, project, item, diff, seat,
+        artifact_name=f"review-tests-{seat.lens}.md", stage="tests",
+    )
+    if outcome is None:
+        return None  # reviewer unavailable — never wedge the pipeline on the gate
+    _, verdict = outcome
+    if verdict.verdict == "request_changes" and verdict.blockers():
+        for finding in verdict.blockers():
+            item.notes.append(
+                f"test-review[{seat.lens}] {finding.category}/{finding.severity}: "
+                f"{finding.description} → {finding.recommendation}"
+            )
+        attempt.outcome = "fail"
+        attempt.summary = f"test review requested changes ({len(verdict.blockers())} blocking)"
+        return f"test review requested changes on '{shorten(item.title, 50)}'"
+    return None
 
 
 def panel_outcome(
@@ -764,10 +902,15 @@ def phase_build(services: Services, project: Project) -> str:
         return f"{role_name} parked a question for you (see `orc inbox`)"
 
     if role_name == "tester":
+        gate_note = None
+        if attempt.outcome == "success" and config.run.review_required and config.run.review_tests:
+            gate_note = review_tests(services, project, item, attempt, sha_before)
         plan.set_status(item.id, "todo")
         project.save_plan(plan)
+        if gate_note:
+            return gate_note
         if attempt.outcome == "success":
-            return f"tests written for '{shorten(item.title, 50)}'; implementation is next"
+            return f"tests written and reviewed for '{shorten(item.title, 50)}'; implementation is next"
         return f"tester {attempt.outcome} on '{shorten(item.title, 50)}'"
 
     if result.status != "done":

@@ -7,11 +7,20 @@ download manifest + orc models config); switch by re-running
 
 ## Profiles at a glance
 
-| Profile | Coder | Planner | Utility | Embeddings | Needs |
-| --- | --- | --- | --- | --- | --- |
-| **balanced-12gb** (default) | Qwen3.6-35B-A3B IQ4_XS (17.7 GB) | same model, thinking on | Qwen3.5-4B (2.8 GB) | jina-code-0.5b (1.0 GB, CPU) | 12 GB VRAM + 24 GB WSL RAM |
-| **max-64gb** | Qwen3-Coder-Next 80B-A3B IQ4_XS (42.9 GB) | Qwen3.6-35B-A3B-MTP Q4_K_XL (23.3 GB) | same | same | 48 GB WSL RAM, DDR5 strongly advised |
-| **classic-12gb** | Qwen2.5-Coder-14B Q4_K_M (9.0 GB, dense) | gpt-oss-20b MXFP4 (12.1 GB) | Qwen3-4B-2507 | Qwen3-Embedding-0.6B | works with 16 GB RAM |
+| Profile | Coder | Planner | Review panel (distinct model families) | Utility | Embeddings | Needs |
+| --- | --- | --- | --- | --- | --- | --- |
+| **balanced-12gb** (default) | Qwen3.6-35B-A3B IQ4_XS (17.7 GB) | same model, thinking on | Qwen3.6 correctness + **gpt-oss-20b** adversarial + **GLM-4.7-Flash** tests | Qwen3.5-4B (2.8 GB) | jina-code-0.5b (1.0 GB, CPU) | 12 GB VRAM + 24 GB WSL RAM |
+| **max-64gb** | Qwen3-Coder-Next 80B-A3B IQ4_XS (42.9 GB) | Qwen3.6-35B-A3B-MTP Q4_K_XL (23.3 GB) | Coder-Next correctness + **GLM-4.7-Flash** adversarial + **Nemotron-Cascade-2** tests | same | same | 48 GB WSL RAM, DDR5 strongly advised |
+| **classic-12gb** | Qwen2.5-Coder-14B Q4_K_M (9.0 GB, dense) | gpt-oss-20b MXFP4 (12.1 GB) | Qwen2.5-Coder correctness + **gpt-oss-20b** adversarial (+ optional GLM third seat) | Qwen3-4B-2507 | Qwen3-Embedding-0.6B | works with 16 GB RAM |
+
+Review panels deliberately span model FAMILIES (Qwen + OpenAI/gpt-oss +
+Zhipu/GLM + NVIDIA/Nemotron): same-weights reviewers are measurably soft on
+their own code, and different lineages catch different bugs. Add seats in
+`~/.eng-orc/config.yaml` (`review.panel`, plus `models.extra` definitions);
+each distinct model costs one swap (~30–60 s) per completed work item, cheap
+against multi-minute build loops. Prefer quality-diverse seats over count —
+beyond three strong families, add lenses (correctness, adversarial,
+security, tests, architecture), not mediocre models.
 
 ## Why these (mid-2026 snapshot)
 
@@ -40,6 +49,14 @@ download manifest + orc models config); switch by re-running
   general 0.6B embedders by ~5 points on code retrieval; F16 GGUF runs
   comfortably on CPU (`-ngl 0`), so it stays resident forever without
   costing VRAM.
+- **GLM-4.7-Flash** (30B-A3B, MIT) — the third model family on the panel:
+  Zhipu lineage with entirely different pretraining than Qwen or OpenAI, so
+  it catches different bugs. SWE-bench V 59.2, AIME25 91.6, MLA attention
+  keeps KV tiny; runs like the other MoEs (experts on CPU, ~6–7 GB GPU).
+- **Nemotron-Cascade-2-30B-A3B** (max profile, NVIDIA lineage) —
+  LiveCodeBench v6 87.2 with olympiad-grade reasoning. Its known weakness
+  (agentic tool use) is irrelevant on the panel: review is a one-shot
+  structured call. Needs ~21 GB host RAM resident, hence max-profile only.
 - **Qwen2.5-Coder-14B + gpt-oss-20b** (classic) — the proven-2025 dense
   stack: zero MoE-offload moving parts, mature templates, lowest RAM bar.
   Optional 1.5–2.5× code-gen speedup via the 0.5B draft

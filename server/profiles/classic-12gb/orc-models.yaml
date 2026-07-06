@@ -15,6 +15,7 @@ models:
     temperature: 1.0
     top_p: 1.0
     thinking: true
+    supports_schema: false          # prompt-JSON + repair; safest with harmony reasoning
     extra_body:
       chat_template_kwargs: {reasoning_effort: high}
   utility:
@@ -25,3 +26,15 @@ models:
   embedder:
     model: embed
     batch_size: 16
+
+review:
+  panel:
+    - {model_role: coder, lens: correctness}     # Qwen2.5-Coder-14B
+    - {model_role: planner, lens: adversarial}   # gpt-oss-20b — distinct weights
+  # With >=24 GB WSL RAM: download the optional GLM model, add a llama-swap
+  # entry for it (copy from the balanced profile), then a third family:
+  #   - {model_role: third-opinion, lens: tests}
+  # plus under models.extra:
+  #   third-opinion: {model: third-opinion, context_window: 16384,
+  #                   temperature: 0.7, top_p: 1.0, thinking: true,
+  #                   supports_schema: false}

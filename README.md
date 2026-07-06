@@ -65,7 +65,7 @@ prove resumability. Green selftest = the harness works on this machine.
 | Concern | Choice |
 | --- | --- |
 | Serving | [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` (CUDA build) behind [llama-swap] — one endpoint, hot-swapped models, resident CPU embedder |
-| Models (default profile) | Qwen3.6-35B-A3B (coder+planner, MoE with CPU-offloaded experts), Qwen3.5-4B (utility), jina-code-embeddings-0.5b (embeddings, CPU) — see [docs/MODELS.md](docs/MODELS.md) |
+| Models (default profile) | Qwen3.6-35B-A3B (coder+planner, MoE with CPU-offloaded experts), Qwen3.5-4B (utility), jina-code-embeddings-0.5b (embeddings, CPU), plus a **three-family review panel** (Qwen + gpt-oss-20b + GLM-4.7-Flash) signing off every diff — see [docs/MODELS.md](docs/MODELS.md) |
 | Orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) phase machine with SQLite checkpoints, one phase-unit per scheduler step |
 | Code context | [LlamaIndex](https://github.com/run-llama/llama_index) + Chroma incremental index, ctags/AST repo map, hybrid retrieval |
 | Long-term memory | [Letta](https://github.com/letta-ai/letta) archival passages + shared blocks, layered over an always-available local SQLite store |

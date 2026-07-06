@@ -42,6 +42,29 @@ models:
     aliases: ["utility"]
     ttl: 600
 
+  # Review panelists: two more model FAMILIES beyond the Qwen builder.
+  "glm-4.7-flash":
+    name: "GLM-4.7-Flash 30B-A3B (IQ4_XS)"
+    cmd: |
+      ${srv} -m ${models}/GLM-4.7-Flash-IQ4_XS.gguf
+      --jinja -fa on -c 32768 -ngl 99 --n-cpu-moe 40
+      -ctk q8_0 -ctv q8_0 --mlock
+      --temp 0.7 --top-p 1.0 --min-p 0.01 --repeat-penalty 1.0
+    aliases: ["third-opinion"]
+    ttl: 900
+
+  # Nemotron-Cascade-2: olympiad-grade reasoning (LiveCodeBench v6 87.2).
+  # Weak at agentic tool use — irrelevant here: review is a one-shot call.
+  "nemotron-cascade-2":
+    name: "Nemotron-Cascade-2-30B-A3B (Q4_K_M)"
+    cmd: |
+      ${srv} -m ${models}/nvidia_Nemotron-Cascade-2-30B-A3B-Q4_K_M.gguf
+      --jinja -fa on -c 16384 -ngl 99 --n-cpu-moe 40
+      -ctk q8_0 -ctv q8_0 --mlock
+      --temp 0.6 --top-p 0.95
+    aliases: ["deep-reasoner"]
+    ttl: 900
+
   "jina-embed":
     name: "jina-code-embeddings-0.5b"
     cmd: |
@@ -61,7 +84,8 @@ routing:
         gpu:
           swap: true
           exclusive: true
-          members: ["qwen3-coder-next", "qwen3.6-35b-mtp", "qwen3.5-4b"]
+          members: ["qwen3-coder-next", "qwen3.6-35b-mtp", "qwen3.5-4b",
+                    "glm-4.7-flash", "nemotron-cascade-2"]
         cpu-resident:
           persistent: true
           swap: false

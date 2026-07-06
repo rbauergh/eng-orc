@@ -402,10 +402,18 @@ def doctor() -> None:
     server_up = svc.client.health()
     row("llm server", server_up, config.server.base_url)
     if server_up:
+        from .llm.catalog import chat_model_roles
+
         served = set(svc.client.model_ids())
-        for name, role_model in (("coder", config.models.coder), ("planner", config.models.planner),
-                                 ("utility", config.models.utility)):
+        for name, role_model in chat_model_roles(config).items():
             row(f"model role: {name}", role_model.model in served, role_model.model)
+        for seat in config.review.panel:
+            try:
+                seat_model = config.models.for_role(seat.model_role)
+                row(f"review seat: {seat.lens}", seat_model.model in served,
+                    f"{seat.model_role} → {seat_model.model}")
+            except KeyError:
+                row(f"review seat: {seat.lens}", False, f"unknown model role {seat.model_role!r}")
         try:
             dim = len(svc.client.embeddings(["ping"], model=config.models.embedder.model)[0])
             row("embeddings", True, f"{config.models.embedder.model} (dim {dim})")

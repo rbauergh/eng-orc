@@ -70,8 +70,13 @@ class ModelsConfig(BaseModel):
         )
     )
     embedder: EmbedderModel = Field(default_factory=EmbedderModel)
+    # Additional named models (review panelists, experiments). Referenced by
+    # name anywhere a model role is accepted, e.g. review.panel entries.
+    extra: dict[str, RoleModel] = Field(default_factory=dict)
 
     def for_role(self, role: str) -> RoleModel:
+        if role in self.extra:
+            return self.extra[role]
         try:
             value = getattr(self, role)
         except AttributeError as exc:
@@ -87,12 +92,33 @@ class RunConfig(BaseModel):
     max_turns_coder: int = 40
     max_turns_oneshot_tools: int = 12  # read-only exploration before charter/design
     review_required: bool = True
-    reviews_per_item: int = 1
     compact_after_turns: int = 14  # tool-loop turns before history compaction
     max_tool_output_chars: int = 6000
     shell_timeout: float = 300.0
     verify_timeout: float = 600.0
     max_steps_per_project_visit: int = 1  # scheduler fairness: steps before rotating projects
+
+
+class PanelReviewer(BaseModel):
+    """One seat on the review panel: which model looks through which lens."""
+
+    model_role: str = "coder"  # coder | planner | utility | any models.extra name
+    lens: str = "correctness"  # see engorc.agents.roles.REVIEW_LENSES
+
+
+class ReviewConfig(BaseModel):
+    """Multi-model code review before sign-off.
+
+    Every completed work item is judged by each panelist independently;
+    blocking findings are unioned and the item only integrates when EVERY
+    panelist approves. Weight diversity (different models) plus lens
+    diversity (different failure modes) is how small local models approach
+    big-model review quality — configure as many seats as you can afford
+    swaps for. An unreachable panelist is skipped with a journal warning,
+    never wedging the pipeline.
+    """
+
+    panel: list[PanelReviewer] = Field(default_factory=lambda: [PanelReviewer()])
 
 
 class MemoryConfig(BaseModel):
@@ -141,6 +167,7 @@ class Config(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     run: RunConfig = Field(default_factory=RunConfig)
+    review: ReviewConfig = Field(default_factory=ReviewConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     index: IndexConfig = Field(default_factory=IndexConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
@@ -242,6 +269,14 @@ run:
   max_attempts_per_item: 3
   max_turns_coder: 40
   review_required: true
+
+review:
+  # Every panelist reviews each completed item; ALL must approve to sign off.
+  # Add seats (and models.extra definitions) for more independent eyes —
+  # each distinct model costs one swap per completed item.
+  panel:
+    - {model_role: coder, lens: correctness}
+    # - {model_role: second-opinion, lens: adversarial}   # defined under models.extra
 
 memory:
   backend: auto                          # auto = Letta when reachable, local SQLite otherwise

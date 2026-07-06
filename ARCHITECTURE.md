@@ -86,9 +86,15 @@ step timeline; losing them costs history, never correctness.
   item with attempt budget left; a tester loop writes failing tests first
   when flagged; the implementer loop works the item; **deterministic
   verification** runs the item's `verify_commands` (an agent saying "done"
-  is a claim, not a fact); the reviewer returns a structured verdict whose
-  blocker findings are recorded onto the item for the next attempt;
-  approved items are committed (`<kind>: <title>`) and the index refreshes.
+  is a claim, not a fact); then the **review panel** — N independent
+  reviewers, each a (model, lens) seat configured in `review.panel` — judges
+  the diff. Distinct weights counter self-preference bias (models favor
+  their own generations), distinct lenses (correctness, adversarial,
+  security, tests, architecture) make each seat hunt a different failure
+  mode. Sign-off requires every panelist to approve; blocking findings are
+  unioned, deduplicated, lens-labeled, and recorded onto the item for the
+  next attempt. Approved items are committed (`<kind>: <title>`) and the
+  index refreshes.
   Exhausted items fail; when nothing is runnable the supervisor opens a
   gate asking the user for direction — honestly stuck beats silently spinning.
 - **wrap**: historian digests the journal → lessons/conventions/project card

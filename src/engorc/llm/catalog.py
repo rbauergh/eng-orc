@@ -25,8 +25,10 @@ def model_for_agent(config: Config, agent_role: str) -> RoleModel:
 
 
 def chat_model_roles(config: Config) -> dict[str, RoleModel]:
-    return {
+    roles = {
         "coder": config.models.coder,
         "planner": config.models.planner,
         "utility": config.models.utility,
     }
+    roles.update(config.models.extra)
+    return roles

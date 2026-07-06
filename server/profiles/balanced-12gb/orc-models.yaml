@@ -29,3 +29,33 @@ models:
   embedder:
     model: embed
     batch_size: 16
+  extra:
+    second-opinion:                 # gpt-oss-20b — OpenAI lineage
+      model: coder-fast
+      context_window: 16384
+      max_output_tokens: 3072
+      temperature: 1.0
+      top_p: 1.0
+      thinking: true
+      supports_schema: false        # harmony reasoning + server-side grammar is unproven;
+                                    # prompt-JSON with the repair loop is reliable for a 20B
+      extra_body:
+        chat_template_kwargs: {reasoning_effort: high}
+    third-opinion:                  # GLM-4.7-Flash — Zhipu lineage
+      model: third-opinion
+      context_window: 16384
+      max_output_tokens: 3072
+      temperature: 0.7
+      top_p: 1.0
+      thinking: true
+      supports_schema: false
+
+review:
+  # Sign-off needs every seat to approve: the builder-family model checks
+  # correctness, and two OTHER model families attack the diff through
+  # different lenses. Distinct weights dodge self-preference bias; distinct
+  # lenses dodge redundant opinions.
+  panel:
+    - {model_role: coder, lens: correctness}           # Qwen3.6
+    - {model_role: second-opinion, lens: adversarial}  # gpt-oss-20b
+    - {model_role: third-opinion, lens: tests}         # GLM-4.7-Flash

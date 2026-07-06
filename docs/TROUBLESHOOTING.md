@@ -76,6 +76,11 @@ the local store; sync pushes it.
 
 ## WSL2
 
+**Setup fails with "generator Ninja does not match previously used Unix
+Makefiles".** A pre-existing `~/llama.cpp/build` from an earlier manual build.
+The installer resets mismatched build trees automatically; on an older copy
+of the script, `rm -rf ~/llama.cpp/build` and re-run.
+
 **`nvidia-smi` missing inside WSL.** Windows driver not installed/too old, or
 WSL needs `wsl --update` + `wsl --shutdown`.
 

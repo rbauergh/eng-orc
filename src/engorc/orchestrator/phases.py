@@ -8,18 +8,21 @@ and the project parks itself.
 
 from __future__ import annotations
 
+import re
+
 from ..agents import load_prompt, role
 from ..agents.runtime import AttemptResult, ToolLoop, one_shot_prose, one_shot_structured
 from ..agents.schemas import (
     Charter,
     DesignExtract,
     DigestExtract,
+    Finding,
     PlanDraft,
     ReviewVerdict,
 )
 from ..agents.toolbox import ToolContext, ensure_repo, run_verification, tools_named
 from ..artifacts import Handoff
-from ..config import RoleModel
+from ..config import PanelReviewer, RoleModel
 from ..context.summarizer import recent_activity, summarize
 from ..decisions import Decision
 from ..events import Kind
@@ -351,8 +354,8 @@ def _pack_brief(services: Services, role_model: RoleModel, sections: list[Sectio
     return packed.text
 
 
-def _review_item(services: Services, project: Project, item: WorkItem, diff: str) -> ReviewVerdict:
-    sections = [
+def _review_sections(project: Project, item: WorkItem, diff: str) -> list[Section]:
+    return [
         Section(name="Work item", text=briefs.item_task_text(item), priority=1),
         Section(name="Diff under review", text=diff or "(no diff captured)", priority=1, truncate="middle"),
         Section(
@@ -361,13 +364,84 @@ def _review_item(services: Services, project: Project, item: WorkItem, diff: str
             priority=4,
         ),
     ]
-    return one_shot_structured(
-        services.caller(project.journal, "reviewer"),
-        model_for_agent(services.config, "reviewer"),
-        ReviewVerdict,
-        load_prompt("reviewer.md"),
-        sections,
-    )
+
+
+def run_review_panel(
+    services: Services, project: Project, item: WorkItem, diff: str
+) -> list[tuple[PanelReviewer, str, ReviewVerdict]]:
+    """Each panelist reviews independently: distinct weights and lenses catch
+    failure modes a single (self-preferring) model misses. A panelist whose
+    model is unreachable or whose verdict fails validation is skipped with a
+    journal record — the surviving panel decides."""
+    from ..agents.roles import REVIEW_LENSES
+
+    config = services.config
+    panel = config.review.panel or [PanelReviewer()]
+    results: list[tuple[PanelReviewer, str, ReviewVerdict]] = []
+    for seat_no, seat in enumerate(panel, 1):
+        actor = f"reviewer:{seat.lens}@{seat.model_role}"
+        try:
+            role_model = config.models.for_role(seat.model_role)
+        except KeyError as exc:
+            project.journal.append(Kind.ERROR, actor=actor, item=item.id,
+                                   error=f"panel seat skipped: {exc}")
+            continue
+        lens_text = REVIEW_LENSES.get(seat.lens, REVIEW_LENSES["correctness"])
+        system = load_prompt("reviewer.md") + "\n## Your lens for this review\n" + lens_text
+        try:
+            verdict = one_shot_structured(
+                services.caller(project.journal, actor),
+                role_model,
+                ReviewVerdict,
+                system,
+                _review_sections(project, item, diff),
+            )
+        except Exception as exc:  # one dead panelist must not wedge the pipeline
+            project.journal.append(Kind.ERROR, actor=actor, item=item.id,
+                                   error=f"panel seat unavailable: {str(exc)[:300]}")
+            continue
+        project.journal.append(
+            Kind.REVIEW, item=item.id, verdict=verdict.verdict,
+            findings=len(verdict.findings), lens=seat.lens, model=role_model.model,
+        )
+        review_md = [f"# Review — {verdict.verdict}",
+                     f"_lens: {seat.lens} · model: {role_model.model}_", "", verdict.summary, ""]
+        for finding in verdict.findings:
+            review_md.append(
+                f"- **{finding.category}/{finding.severity}** {finding.description}"
+                f" → {finding.recommendation}"
+            )
+        project.artifacts.write(
+            f"review-{seat_no}-{seat.lens}.md", "\n".join(review_md), subdir=f"attempts/{item.id}"
+        )
+        results.append((seat, role_model.model, verdict))
+    return results
+
+
+def panel_outcome(
+    results: list[tuple[PanelReviewer, str, ReviewVerdict]],
+) -> tuple[bool, list[tuple[str, Finding]]]:
+    """Sign-off requires every panelist to approve. Blocking findings (from
+    panelists requesting changes) are unioned and deduplicated; each keeps its
+    lens label so the implementer knows who is asking for what."""
+    blockers: list[tuple[str, Finding]] = []
+    seen: set[tuple[str, str, str]] = set()
+    approved = True
+    for seat, _model, verdict in results:
+        seat_blockers = verdict.blockers()
+        if verdict.verdict == "request_changes" and seat_blockers:
+            approved = False
+            for finding in seat_blockers:
+                key = (
+                    finding.category,
+                    finding.file,
+                    re.sub(r"[^a-z0-9]+", "", finding.description.lower())[:80],
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                blockers.append((seat.lens, finding))
+    return approved, blockers
 
 
 def _integrate_item(services: Services, project: Project, plan: Plan, item: WorkItem) -> str:
@@ -465,33 +539,35 @@ def phase_build(services: Services, project: Project) -> str:
 
     if config.run.review_required:
         diff = diff_since(project.workroom, sha_before)
-        try:
-            verdict = _review_item(services, project, item, truncate_middle(diff, 24000))
-        except StructuredError as exc:
-            project.journal.append(Kind.ERROR, actor="reviewer", error=str(exc)[:400])
-            verdict = None
-        if verdict is not None:
+        results = run_review_panel(services, project, item, truncate_middle(diff, 24000))
+        if not results:
             project.journal.append(
-                Kind.REVIEW, item=item.id, verdict=verdict.verdict, findings=len(verdict.findings)
+                Kind.ERROR, actor="reviewer", item=item.id,
+                error="no review panelist was available; integrating unreviewed",
             )
-            review_md = [f"# Review — {verdict.verdict}", "", verdict.summary, ""]
-            for finding in verdict.findings:
-                review_md.append(
-                    f"- **{finding.category}/{finding.severity}** {finding.description}"
-                    f" → {finding.recommendation}"
+        else:
+            approved, blockers = panel_outcome(results)
+            summary_md = [f"# Review panel — {'approved' if approved else 'changes requested'}", ""]
+            for seat, model, verdict in results:
+                summary_md.append(
+                    f"- {seat.lens} ({model}): **{verdict.verdict}**, "
+                    f"{len(verdict.findings)} finding(s) — {shorten(verdict.summary, 140)}"
                 )
-            project.artifacts.write("review.md", "\n".join(review_md), subdir=f"attempts/{item.id}")
-            if verdict.verdict == "request_changes" and verdict.blockers():
-                for finding in verdict.blockers():
+            project.artifacts.write("review.md", "\n".join(summary_md), subdir=f"attempts/{item.id}")
+            if not approved:
+                for lens, finding in blockers:
                     item.notes.append(
-                        f"review {finding.category}/{finding.severity}: {finding.description} "
-                        f"→ {finding.recommendation}"
+                        f"review[{lens}] {finding.category}/{finding.severity}: "
+                        f"{finding.description} → {finding.recommendation}"
                     )
                 attempt.outcome = "fail"
-                attempt.summary = f"review requested changes: {shorten(verdict.summary, 160)}"
+                attempt.summary = (
+                    f"review panel requested changes ({len(blockers)} blocking finding(s) "
+                    f"across {len(results)} reviewer(s))"
+                )
                 plan.set_status(item.id, "todo")
                 project.save_plan(plan)
-                return f"review requested changes on '{shorten(item.title, 50)}'"
+                return f"review panel requested changes on '{shorten(item.title, 50)}'"
 
     sha = _integrate_item(services, project, plan, item)
     suffix = f" (commit {sha})" if sha else ""

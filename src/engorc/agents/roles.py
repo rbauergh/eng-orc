@@ -108,3 +108,34 @@ def role(name: str) -> RoleSpec:
 
 def load_prompt(prompt_file: str) -> str:
     return (resources.files("engorc.agents.prompts") / prompt_file).read_text(encoding="utf-8")
+
+
+# Review-panel lenses: each panelist hunts a different failure mode, so extra
+# seats add coverage instead of redundant opinions. Appended to reviewer.md.
+REVIEW_LENSES: dict[str, str] = {
+    "correctness": (
+        "Primary lens: CORRECTNESS and completeness. Does the diff actually satisfy every "
+        "acceptance criterion? Trace the logic on realistic inputs, including the edges the "
+        "tests skip."
+    ),
+    "adversarial": (
+        "Primary lens: ADVERSARIAL. Assume this diff is wrong and try to prove it. Construct "
+        "concrete inputs or sequences that break it; hunt for silent failure paths, swallowed "
+        "errors, off-by-ones, and 'passes the tests but not the intent' shortcuts. If you "
+        "cannot break it after honest effort, approve."
+    ),
+    "security": (
+        "Primary lens: SECURITY. Injection, path traversal, unsafe deserialization, secrets in "
+        "code or logs, unvalidated external input, subprocess/shell hazards."
+    ),
+    "tests": (
+        "Primary lens: TESTS. Do the tests genuinely encode the acceptance criteria, or do "
+        "they only mirror the implementation? Find the untested branch that matters most; flag "
+        "assertions weak enough to pass wrong behavior."
+    ),
+    "architecture": (
+        "Primary lens: ARCHITECTURE. Does the change respect the design document — right "
+        "module, right layer, no duplicated logic, no leaked abstractions that will hurt the "
+        "next work item?"
+    ),
+}

@@ -1,6 +1,9 @@
-# model manifest — profile: max-64gb (~70 GB total; needs 64 GB host RAM + fast ext4 disk)
+# model manifest — profile: max-64gb (~110 GB total; needs 64 GB host RAM + fast ext4 disk)
 # format: <hf-repo>|<include-pattern>
 bartowski/Qwen_Qwen3-Coder-Next-GGUF|Qwen_Qwen3-Coder-Next-IQ4_XS.gguf
 havenoammo/Qwen3.6-35B-A3B-MTP-GGUF|Qwen3.6-35B-A3B-MTP-UD-Q4_K_XL.gguf
 unsloth/Qwen3.5-4B-GGUF|Qwen3.5-4B-UD-Q4_K_XL.gguf
 jinaai/jina-code-embeddings-0.5b-GGUF|jina-code-embeddings-0.5b-F16.gguf
+# review panelists — GLM (Zhipu) and Nemotron (NVIDIA) families
+unsloth/GLM-4.7-Flash-GGUF|GLM-4.7-Flash-IQ4_XS.gguf
+bartowski/nvidia_Nemotron-Cascade-2-30B-A3B-GGUF|nvidia_Nemotron-Cascade-2-30B-A3B-Q4_K_M.gguf

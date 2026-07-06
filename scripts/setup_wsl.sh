@@ -90,11 +90,47 @@ build_llama() {
   fi
   git -C "$LLAMA_DIR" fetch --tags --quiet
   git -C "$LLAMA_DIR" checkout --quiet "$LLAMA_TAG"
+
+  cache="$LLAMA_DIR/build/CMakeCache.txt"
+  if [ -f "$cache" ]; then
+    # Preserve the evidence of any custom flags a previous hand-tuned build
+    # used (e.g. a GPU workaround) BEFORE the tree is reset, and surface them.
+    flags_backup="$LLAMA_DIR/build-flags-backup.txt"
+    grep -E '^(GGML_|LLAMA_|CMAKE_CUDA_ARCHITECTURES|CMAKE_CUDA_FLAGS|CMAKE_CXX_FLAGS|CMAKE_C_FLAGS)' "$cache" \
+      | grep -vE '=(OFF|)$' > "$flags_backup" || true
+    if [ -s "$flags_backup" ]; then
+      log "previous build's non-default cmake settings (saved to $flags_backup):"
+      sed 's/^/    /' "$flags_backup"
+      log "carry any GPU-workaround flags forward via CMAKE_EXTRA_ARGS, e.g.:"
+      log "    CMAKE_EXTRA_ARGS='-DGGML_CUDA_FORCE_MMQ=ON' scripts/setup_wsl.sh ..."
+    fi
+  fi
+  # A build tree configured with another generator (e.g. the default Unix
+  # Makefiles from an earlier manual build) cannot be reconfigured for Ninja.
+  if [ -f "$cache" ] && ! grep -q '^CMAKE_GENERATOR:INTERNAL=Ninja$' "$cache"; then
+    log "existing build tree uses a different CMake generator — resetting build/"
+    rm -rf "$LLAMA_DIR/build"
+  fi
+
+  # shellcheck disable=SC2086  # CMAKE_EXTRA_ARGS is intentionally word-split
   cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" -G Ninja \
     -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCH" -DGGML_NATIVE=OFF \
-    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_BUILD_TYPE=Release ${CMAKE_EXTRA_ARGS:-}
   cmake --build "$LLAMA_DIR/build" --config Release -j "$(nproc)" -t llama-server
   echo "$LLAMA_TAG" > "$LLAMA_DIR/build/.engorc-tag"
+
+  # Prove the fresh binary can actually see the GPU before we invest in
+  # 30 GB of model downloads (catches wrong-arch builds immediately).
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    if "$LLAMA_DIR/build/bin/llama-server" --list-devices 2>/dev/null | grep -qi cuda; then
+      log "llama-server sees the GPU: $("$LLAMA_DIR/build/bin/llama-server" --list-devices 2>/dev/null | grep -i cuda | head -1)"
+    else
+      warn "llama-server does not report a CUDA device. Likely an arch mismatch —"
+      warn "check 'nvidia-smi' works, confirm CUDA_ARCH=$CUDA_ARCH matches your GPU"
+      warn "(4070 Ti = 89), and see $LLAMA_DIR/build-flags-backup.txt for flags your"
+      warn "old working build used (re-apply via CMAKE_EXTRA_ARGS)."
+    fi
+  fi
 }
 if [ -x "$LLAMA_DIR/build/bin/llama-server" ] \
    && [ "$(cat "$LLAMA_DIR/build/.engorc-tag" 2>/dev/null || true)" = "$LLAMA_TAG" ]; then
@@ -158,9 +194,12 @@ from engorc.config import load_config
 profile_path = Path(sys.argv[1])
 config_path = load_config().config_path
 data = yaml.safe_load(config_path.read_text()) or {}
-data["models"] = yaml.safe_load(profile_path.read_text())["models"]
+profile = yaml.safe_load(profile_path.read_text())
+for key in ("models", "review"):
+    if key in profile:
+        data[key] = profile[key]
 config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
-print(f"models section set from {profile_path.name}")
+print(f"models/review sections set from {profile_path.name}")
 PYEOF
 
 # --- 10. systemd user service for llama-swap ------------------------------------------------------------

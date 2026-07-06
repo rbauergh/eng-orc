@@ -76,7 +76,7 @@ models:
   "nemotron-3-nano":
     name: "Nemotron-3-Nano-30B-A3B (IQ4_NL)"
     cmd: |
-      ${srv} -m ${models}/Nemotron-3-Nano-30B-A3B-UD-IQ4_NL.gguf
+      ${srv} -m ${models}/Nemotron-3-Nano-30B-A3B-IQ4_NL.gguf
       --jinja -fa on -c 16384 -ngl 99 --n-cpu-moe 36
       -ctk q8_0 -ctv q8_0 --mlock
       --temp 0.6 --top-p 0.95

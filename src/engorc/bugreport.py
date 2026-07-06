@@ -177,10 +177,27 @@ def _mark(ok: bool | None) -> str:
     return {True: "ok", False: "FAIL", None: "warn"}[ok]
 
 
+def _repo_sha() -> str:
+    """Which eng-orc commit this box is actually running (editable install)."""
+    repo = Path(__file__).resolve().parents[2]
+    try:
+        proc = subprocess.run(["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
+                              capture_output=True, text=True, timeout=10)
+        if proc.returncode != 0:
+            return "unknown"
+        sha = proc.stdout.strip()
+        dirty = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
+                               capture_output=True, text=True, timeout=10)
+        return sha + ("+dirty" if dirty.stdout.strip() else "")
+    except Exception:
+        return "unknown"
+
+
 def build_report(svc, config: Config) -> str:
     parts: list[str] = [
         "# orc diagnostics report",
-        f"_generated {iso_now()} · eng-orc {__version__} · python {sys.version.split()[0]} · {platform.platform()}_",
+        f"_generated {iso_now()} · eng-orc {__version__} (commit {_repo_sha()}) · "
+        f"python {sys.version.split()[0]} · {platform.platform()}_",
         "",
         "## Environment checks",
     ]
@@ -213,25 +230,9 @@ def build_report(svc, config: Config) -> str:
         parts.append(f"(could not list projects: {exc})")
     for project in projects:
         try:
-            meta = project.meta
-        except FileNotFoundError:
-            continue
-        progress = project.load_plan().progress()
-        parts += [
-            f"### {meta.slug}",
-            f"phase {meta.phase} · state {meta.state}"
-            + (f" ({meta.state_reason})" if meta.state_reason else "")
-            + f" · plan {progress.get('done', 0)}/{progress.get('total', 0)}"
-            + f" · open gates {len(project.gates.open_gates())}",
-        ]
-        errors = project.journal.tail(5, kinds=[Kind.ERROR])
-        if errors:
-            parts.append("recent errors:")
-            parts += [f"- [{e.ts[5:16]}] {shorten(str(e.payload.get('error', '')), 300)}" for e in errors]
-        activity = render_events(project.journal.tail(10))
-        if activity:
-            parts += ["recent activity:", activity]
-        parts.append("")
+            parts += _project_section(project)
+        except Exception as exc:  # one broken project must not kill the report
+            parts += [f"### {project.root.name}", f"(section failed: {exc})", ""]
 
     parts += [
         "## llama-swap service log (tail)",
@@ -250,6 +251,87 @@ def _read(path: Path) -> str:
         return path.read_text(encoding="utf-8").strip() or "(empty)"
     except OSError:
         return "(not found)"
+
+
+def _latest_transcript_tail(project, item_id: str, max_chars: int = 2200) -> str:
+    from .util import truncate_tail
+
+    attempt_dir = project.artifacts.path("", subdir=f"attempts/{item_id}")
+    if not attempt_dir.is_dir():
+        return ""
+    candidates = [p for p in attempt_dir.glob("*.md")
+                  if not p.name.startswith(("handoff-", "review"))]
+    if not candidates:
+        return ""
+    newest = max(candidates, key=lambda p: p.stat().st_mtime)
+    return truncate_tail(_read(newest), max_chars)
+
+
+def _project_section(project) -> list[str]:
+    """Everything needed to debug a project remotely: plan state, the
+    substance of failed attempts (summaries, verification output, review
+    blockers via notes), transcript tails, and gate texts."""
+    meta = project.meta
+    plan = project.load_plan()
+    progress = plan.progress()
+    gates = project.gates.all()
+    open_gates = [g for g in gates if g.status == "open"]
+    parts = [
+        f"### {meta.slug}",
+        f"phase {meta.phase} · state {meta.state}"
+        + (f" ({meta.state_reason})" if meta.state_reason else "")
+        + f" · plan {progress.get('done', 0)}/{progress.get('total', 0)}"
+        + f" · open gates {len(open_gates)}",
+    ]
+
+    if plan.items:
+        parts.append("")
+        parts.append("| item | title | status | attempts | triaged |")
+        parts.append("| --- | --- | --- | --- | --- |")
+        for item in plan.items:
+            triaged = sum(1 for n in item.notes if n.startswith("triage#"))
+            parts.append(
+                f"| {item.id[-6:]} | {shorten(item.title, 50)} | {item.status} "
+                f"| {len(item.attempts)} | {triaged} |"
+            )
+
+    problem_items = [i for i in plan.items
+                     if i.status in ("failed", "blocked") or (i.attempts and i.status != "done")]
+    for item in problem_items[:4]:
+        parts += ["", f"#### problem item {item.id[-6:]}: {shorten(item.title, 70)} ({item.status})"]
+        if item.acceptance:
+            parts.append("acceptance: " + "; ".join(shorten(a, 100) for a in item.acceptance))
+        for attempt in item.attempts[-3:]:
+            parts.append(f"- attempt [{attempt.role}/{attempt.model}] {attempt.outcome}: "
+                         f"{shorten(attempt.summary, 260)}")
+            if attempt.test_summary:
+                parts.append(f"  verification: {shorten(attempt.test_summary, 400)}")
+        for note in item.notes[-10:]:
+            parts.append(f"- note: {shorten(note, 260)}")
+        transcript = _latest_transcript_tail(project, item.id)
+        if transcript:
+            parts += ["", "latest attempt transcript (tail):", "```", transcript, "```"]
+
+    if gates:
+        parts.append("")
+        parts.append("gates:")
+        for gate in [g for g in gates if g.status == "open"][:5]:
+            parts.append(f"- OPEN [{gate.from_role}] {shorten(gate.question, 400)}")
+        for gate in [g for g in gates if g.status == "answered"][-3:]:
+            parts.append(f"- answered [{gate.from_role}] Q: {shorten(gate.question, 200)} "
+                         f"→ A: {shorten(gate.answer, 200)}")
+
+    errors = project.journal.tail(10, kinds=[Kind.ERROR])
+    if errors:
+        parts.append("")
+        parts.append("recent errors:")
+        parts += [f"- [{e.ts[5:16]}] [{e.actor}] {shorten(str(e.payload.get('error', '')), 300)}"
+                  for e in errors]
+    activity = render_events(project.journal.tail(15))
+    if activity:
+        parts += ["", "recent activity:", activity]
+    parts.append("")
+    return parts
 
 
 # ---------------------------------------------------------------------- sharing

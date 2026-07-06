@@ -84,7 +84,17 @@ while IFS= read -r raw_line; do
     continue
   fi
   case "$pattern" in
-    *\**) ;;
+    *\**)
+      # a wildcard matching zero files "succeeds" silently — catch that here
+      matched=0
+      for f in "$MODELS_DIR"/$pattern; do
+        [ -e "$f" ] && matched=1 && break
+      done
+      if [ "$matched" != 1 ]; then
+        printf '\033[1;31m[models] pattern matched NOTHING:\033[0m %s (check the filename on the HF repo)\n' "$pattern" >&2
+        failures=$((failures + 1))
+      fi
+      ;;
     *) [ -s "$MODELS_DIR/$pattern" ] || { printf '\033[1;31m[models] MISSING after download:\033[0m %s\n' "$pattern" >&2; failures=$((failures + 1)); } ;;
   esac
 done < "$MANIFEST"

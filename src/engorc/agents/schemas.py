@@ -99,6 +99,27 @@ class ReviewVerdict(BaseModel):
         return [f for f in self.findings if f.severity in ("blocker", "major")]
 
 
+class ItemTriage(BaseModel):
+    item_id: str
+    action: Literal["revise", "split", "drop", "retry", "ask_user"]
+    diagnosis: str = Field(description="what actually went wrong, citing the evidence")
+    guidance: str = Field(description="concrete direction for the next attempt (revise/retry); empty otherwise")
+    new_description: str = Field(description="revise: replacement description; empty otherwise")
+    new_acceptance: list[str] = Field(description="revise: replacement acceptance criteria; empty = keep")
+    new_verify_commands: list[str] = Field(description="revise: replacement verify commands; empty = keep")
+    split_items: list[PlanItemDraft] = Field(description="split: the smaller replacement items, in order")
+    question: str = Field(description="ask_user: the specific decision only a human can make")
+
+
+class TriageReport(BaseModel):
+    reasoning: str
+    items: list[ItemTriage]
+    systemic_notes: list[str] = Field(
+        description="problems beyond any single item (a reviewer model failing to load, "
+        "a broken environment) worth surfacing to the user"
+    )
+
+
 class CommitMessageDraft(BaseModel):
     reasoning: str
     message: str = Field(description="conventional-commit style subject line, <=72 chars, imperative")

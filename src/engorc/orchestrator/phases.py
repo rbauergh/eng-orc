@@ -19,6 +19,7 @@ from ..agents.schemas import (
     Finding,
     PlanDraft,
     ReviewVerdict,
+    TriageReport,
 )
 from ..agents.toolbox import ToolContext, ensure_repo, run_verification, tools_named
 from ..artifacts import Handoff
@@ -298,6 +299,141 @@ def _absorb_supervisor_guidance(project: Project, plan: Plan) -> bool:
     return changed
 
 
+def _triage_round(item: WorkItem) -> int:
+    return sum(1 for note in item.notes if note.startswith("triage#"))
+
+
+def _triage_evidence(project: Project, items: list[WorkItem]) -> str:
+    parts = []
+    charter = project.charter() or {}
+    criteria = charter.get("success_criteria") or []
+    if criteria:
+        parts.append("## Charter success criteria (work these need must NOT be dropped)\n"
+                     + "\n".join(f"- {c}" for c in criteria))
+    for item in items:
+        lines = [f"## Item {item.id}: {item.title}", item.description or "(no description)"]
+        if item.acceptance:
+            lines.append("Acceptance: " + "; ".join(item.acceptance))
+        if item.verify_commands:
+            lines.append("Verify commands: " + "; ".join(item.verify_commands))
+        for attempt in item.attempts[-3:]:
+            lines.append(
+                f"- attempt [{attempt.role}/{attempt.model}] {attempt.outcome}: "
+                f"{shorten(attempt.summary, 220)}"
+            )
+            if attempt.test_summary:
+                lines.append(f"  verification: {shorten(attempt.test_summary, 300)}")
+        for note in item.notes[-8:]:
+            lines.append(f"- note: {shorten(note, 220)}")
+        parts.append("\n".join(lines))
+    errors = project.journal.tail(10, kinds=[Kind.ERROR])
+    if errors:
+        parts.append("## Recent errors (some failures may be infrastructure, not the work)\n"
+                     + "\n".join(f"- [{e.actor}] {shorten(str(e.payload.get('error', '')), 220)}"
+                                 for e in errors))
+    return "\n\n".join(parts)
+
+
+def _run_triage(services: Services, project: Project, plan: Plan, items: list[WorkItem]) -> str:
+    """The planner inspects the failure evidence and revises the plan so the
+    build/test/review agents get NEW information — escalating to the human
+    only for decisions a model cannot make. Returns "" when triage failed
+    (caller falls back to the human gate)."""
+    config = services.config
+    log.agent("triage", f"diagnosing {len(items)} stuck item(s) from the evidence …")
+    try:
+        report = one_shot_structured(
+            services.caller(project.journal, "triage"),
+            model_for_agent(config, "planner"),
+            TriageReport,
+            load_prompt("triage.md"),
+            [Section(name="Evidence", text=_triage_evidence(project, items),
+                     priority=1, truncate="middle")],
+        )
+    except Exception as exc:
+        project.journal.append(Kind.ERROR, actor="triage", error=str(exc)[:400])
+        return ""
+
+    by_id = {item.id: item for item in items}
+    questions: list[tuple[WorkItem, object]] = []
+    acted = 0
+    for entry in report.items:
+        item = by_id.get(entry.item_id)
+        if item is None:
+            continue
+        marker = f"triage#{_triage_round(item) + 1}: {shorten(entry.diagnosis, 200)}"
+        log.agent("triage", f"{entry.action} '{shorten(item.title, 50)}' — {shorten(entry.diagnosis, 90)}")
+        project.journal.append(Kind.DECISION, actor="triage", item=item.id,
+                               title=f"triage: {entry.action}",
+                               diagnosis=shorten(entry.diagnosis, 240))
+        if entry.action in ("revise", "retry"):
+            if entry.action == "revise":
+                if entry.new_description:
+                    item.description = entry.new_description
+                if entry.new_acceptance:
+                    item.acceptance = entry.new_acceptance
+                if entry.new_verify_commands:
+                    item.verify_commands = entry.new_verify_commands
+            item.notes.append(marker)
+            if entry.guidance:
+                item.notes.append(f"triage guidance: {shorten(entry.guidance, 300)}")
+            item.attempts = []
+            item.status = "todo"
+            item.touch()
+            acted += 1
+        elif entry.action == "drop":
+            item.notes.append(marker)
+            plan.set_status(item.id, "dropped")
+            project.decisions.record(Decision(
+                title=f"Dropped: {shorten(item.title, 60)}",
+                decision=entry.diagnosis,
+                rationale=entry.guidance or "triage judgment",
+                confidence=0.6,
+                made_by="triage",
+                item=item.id,
+            ))
+            acted += 1
+        elif entry.action == "split" and entry.split_items:
+            replacements = _draft_to_plan(
+                PlanDraft(reasoning="", goal_recap="", items=entry.split_items)
+            ).items
+            previous = None
+            for replacement in replacements:
+                replacement.depends_on = list(set(replacement.depends_on) | set(item.depends_on))
+                if previous is not None and previous.id not in replacement.depends_on:
+                    replacement.depends_on.append(previous.id)
+                replacement.notes.append(f"split from {item.id}: {shorten(entry.diagnosis, 160)}")
+                previous = replacement
+            plan.add_items(replacements)
+            item.notes.append(marker)
+            plan.set_status(item.id, "dropped")
+            acted += 1
+        elif entry.action == "ask_user":
+            questions.append((item, entry))
+    for note in report.systemic_notes:
+        log.warn(f"triage flags a systemic problem: {note}")
+        project.journal.append(Kind.ERROR, actor="triage", error=f"systemic: {shorten(note, 300)}")
+    project.save_plan(plan)
+
+    if questions:
+        for item, entry in questions:
+            project.gates.open(
+                question=f"{entry.question}\n\nTriage diagnosis: {shorten(entry.diagnosis, 240)}",
+                from_role="supervisor",
+                phase="build",
+                item=item.id,
+                context=f"'{item.title}' failed repeatedly; triage could not resolve it autonomously",
+            )
+            project.journal.append(Kind.GATE_OPENED, actor="triage", item=item.id,
+                                   question=entry.question)
+        project.set_state("blocked_on_user", reason="triage needs a human decision")
+        return (f"triage: {acted} item(s) adjusted autonomously, "
+                f"{len(questions)} question(s) need you (orc inbox)")
+    if acted:
+        return f"triage adjusted {acted} stuck item(s) with fresh direction; retrying"
+    return ""
+
+
 def _handoff_excerpt(handoff_md: str, max_lines: int = 6) -> list[str]:
     """The meat of a handoff note: content lines, headers and blanks dropped."""
     lines = []
@@ -438,9 +574,17 @@ def _pack_brief(services: Services, role_model: RoleModel, sections: list[Sectio
 
 
 def _review_sections(project: Project, item: WorkItem, diff: str) -> list[Section]:
+    from ..agents.toolbox.git import tracked_files
+
+    files = tracked_files(project.workroom)
     return [
         Section(name="Work item", text=briefs.item_task_text(item), priority=1),
         Section(name="Diff under review", text=diff or "(no diff captured)", priority=1, truncate="middle"),
+        Section(
+            name="Files present in the workroom (verify 'missing file' claims against this)",
+            text="\n".join(files) if files else "(none)",
+            priority=3,
+        ),
         Section(
             name="Design (excerpt)",
             text=project.design_path.read_text(encoding="utf-8") if project.design_path.exists() else "",
@@ -570,15 +714,30 @@ def phase_build(services: Services, project: Project) -> str:
             plan.set_status(stuck_item.id, "failed")
         if open_exhausted:
             project.save_plan(plan)
+
+        # Before asking a human: let the planner debug the failures and feed
+        # NEW information to the next attempts (revise/split/drop/retry).
+        candidates = [i for i in exhausted
+                      if i.status == "failed" and _triage_round(i) < config.run.triage_rounds]
+        if candidates:
+            note = _run_triage(services, project, plan, candidates)
+            if note:
+                return note
+
         if exhausted and not project.gates.open_gates():
-            summary = "; ".join(
-                f"{i.title}: {shorten((i.last_attempt().summary if i.last_attempt() else ''), 120)}"
-                for i in exhausted[:3]
-            )
+            lines = []
+            for stuck in exhausted[:3]:
+                last = stuck.last_attempt()
+                diagnosis = next((n for n in reversed(stuck.notes) if n.startswith("triage#")), "")
+                lines.append(
+                    f"'{stuck.title}': {shorten((last.summary if last else ''), 100)}"
+                    + (f" | {diagnosis}" if diagnosis else "")
+                )
             project.gates.open(
                 question=(
-                    "I am stuck: these work items failed repeatedly and block progress. "
-                    "Advise (simplify, drop, or give direction): " + summary
+                    "Triage could not unstick these items and I need direction "
+                    "(simplify the goal, drop them, or point at the fix):\n- "
+                    + "\n- ".join(lines)
                 ),
                 from_role="supervisor",
                 phase="build",
@@ -635,8 +794,17 @@ def phase_build(services: Services, project: Project) -> str:
         return f"verification failed on '{shorten(item.title, 50)}'; feedback recorded for the next attempt"
     attempt.test_summary = report.summary()
 
+    diff = diff_since(project.workroom, sha_before)
+    if not diff.strip():
+        # "done" with zero file changes is not done — do not waste the panel on it
+        attempt.outcome = "fail"
+        attempt.summary = "finished without changing any files"
+        item.notes.append("previous attempt claimed done but produced no file changes")
+        plan.set_status(item.id, "todo")
+        project.save_plan(plan)
+        return f"implementer produced no changes on '{shorten(item.title, 50)}'; retrying"
+
     if config.run.review_required:
-        diff = diff_since(project.workroom, sha_before)
         results = run_review_panel(services, project, item, truncate_middle(diff, 24000))
         if not results:
             project.journal.append(

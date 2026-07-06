@@ -99,6 +99,10 @@ class RunConfig(BaseModel):
     # coder, coder, fallback. Rotation only ever happens BETWEEN attempts —
     # within an attempt one consistent author owns the work.
     coder_fallbacks: list[str] = Field(default_factory=list)
+    # How many times the planner may autonomously triage an exhausted item
+    # (diagnose from the evidence, then revise/split/drop/retry it) before
+    # the question escalates to the user.
+    triage_rounds: int = 2
     max_tool_output_chars: int = 6000
     shell_timeout: float = 300.0
     verify_timeout: float = 600.0

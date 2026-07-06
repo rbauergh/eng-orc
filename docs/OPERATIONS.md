@@ -37,10 +37,11 @@ Updating the code: `git pull && .venv/bin/pip install -e ".[dev]" && orc selftes
 orc new "Build a small FastAPI service that ..."     # greenfield
 orc new "Add rate limiting to my API" --repo ~/code/myapi   # existing repo
 orc run --watch          # work everything; Ctrl-C any time — state is on disk
+orc run --watch -i       # …and answer questions inline the moment work parks
 orc status               # all projects: phase, plan progress, waiting gates
 orc status <slug>        # deep dive: plan table, open questions, activity
-orc inbox                # every question agents are waiting on
-orc answer <gate-id> "use sqlite, keep it simple"
+orc inbox                # interactive Q&A session (no ids; --list for plain output)
+orc answer "use sqlite, keep it simple"          # answers the oldest open gate
 orc ask <slug> "also make sure it handles unicode"  # amend a mission mid-flight
 orc pause <slug> / orc resume <slug> / orc abandon <slug>
 orc report <slug>        # the wrap-up report

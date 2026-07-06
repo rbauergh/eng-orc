@@ -78,19 +78,31 @@ def head_sha(workroom: Path) -> str:
     return out if code == 0 else ""
 
 
+# git's well-known empty-tree object: the diff base when HEAD is unborn
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+
 def diff_since(workroom: Path, ref: str) -> str:
-    if not ref:
-        code, out = _git(workroom, "diff", "HEAD")
-        if code == 0 and out:
-            return out
-        code, out = _git(workroom, "show", "--stat", "--patch", "HEAD")
-        return out if code == 0 else ""
-    code, out = _git(workroom, "diff", f"{ref}..HEAD")
-    base = out if code == 0 else ""
-    code, dirty = _git(workroom, "diff", "HEAD")
-    if code == 0 and dirty:
-        base = base + "\n" + dirty if base else dirty
-    return base
+    """Everything that changed since ref, INCLUDING brand-new files.
+
+    `git diff` ignores untracked paths — and new work is mostly new files —
+    so stage first (harmless: integration commits `git add -A` anyway), and
+    diff against the empty tree when the repo has no commits yet."""
+    if not ensure_repo(workroom):
+        return ""
+    _git(workroom, "add", "-A")
+    base = ref or EMPTY_TREE
+    code, out = _git(workroom, "diff", base)
+    return out if code == 0 else ""
+
+
+def tracked_files(workroom: Path, limit: int = 200) -> list[str]:
+    _git(workroom, "add", "-A")
+    code, out = _git(workroom, "ls-files")
+    if code != 0:
+        return []
+    files = [line for line in out.splitlines() if line.strip()]
+    return files[:limit]
 
 
 GIT_TOOLS = [

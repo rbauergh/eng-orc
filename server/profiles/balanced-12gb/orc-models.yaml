@@ -57,16 +57,16 @@ models:
       top_p: 0.95
       thinking: true
       supports_schema: false
-    coder-fallback:                 # gpt-oss-20b tuned for the TOOL LOOP: low
-      model: coder-fast             # reasoning effort so thinking never eats the
-      context_window: 16384         # output budget before the ACTION line
-      max_output_tokens: 3072
-      temperature: 1.0
-      top_p: 1.0
+    coder-fallback:                 # gpt-oss-20b tuned for the TOOL LOOP: medium
+      model: coder-fast             # reasoning (its native default) with enough
+      context_window: 16384         # output headroom that thinking can never
+      max_output_tokens: 4096       # starve the ACTION line (high stays on the
+      temperature: 1.0              # review seat, where one-shot calls can
+      top_p: 1.0                    # afford to deliberate)
       thinking: true
       supports_schema: false
       extra_body:
-        chat_template_kwargs: {reasoning_effort: low}
+        chat_template_kwargs: {reasoning_effort: medium}
 
 run:
   # After the primary coder burns its attempts on an item, the next attempt

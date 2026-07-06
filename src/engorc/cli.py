@@ -97,6 +97,8 @@ def run(
     once: bool = typer.Option(False, "--once", help="run exactly one step"),
     verbose: bool = typer.Option(False, "--verbose", "-v",
                                  help="narrate every agent turn (tool-by-tool)"),
+    interactive: bool = typer.Option(False, "--interactive", "-i",
+                                     help="prompt for gate answers inline whenever work parks"),
 ) -> None:
     """Advance projects: one phase unit at a time, GPU-fair, park on questions."""
     from .orchestrator.scheduler import Scheduler
@@ -104,7 +106,8 @@ def run(
     if verbose:
         log.set_level("debug")
     scheduler = Scheduler(services())
-    scheduler.run(slug=project, max_steps=1 if once else max_steps, watch=watch)
+    scheduler.run(slug=project, max_steps=1 if once else max_steps, watch=watch,
+                  interactive=interactive)
 
 
 @app.command()
@@ -222,9 +225,21 @@ def _all_gates(svc) -> list[tuple[Project, Gate]]:
 
 
 @app.command()
-def inbox() -> None:
-    """All open questions from agents, across every project."""
-    pairs = _all_gates(services())
+def inbox(
+    list_only: bool = typer.Option(False, "--list", help="print the plain list instead of prompting"),
+) -> None:
+    """Answer agents' questions interactively (plain listing with --list)."""
+    svc = services()
+    if not list_only and log.console.is_terminal:
+        from .interactive import prompt_gates
+
+        answered = prompt_gates(svc)
+        if answered:
+            log.info("continue with: orc run  (or it resumes on the next --watch pass)")
+        else:
+            log.success("inbox zero — nothing is waiting on you")
+        return
+    pairs = _all_gates(svc)
     if not pairs:
         log.success("inbox zero — nothing is waiting on you")
         return
@@ -236,13 +251,37 @@ def inbox() -> None:
             _console().print(f"  [dim]context: {escape(shorten(gate.context, 160))}[/dim]")
         if gate.options:
             _console().print(f"  options: {escape(' | '.join(gate.options))}")
-    _console().print("\nanswer with: orc answer <gate-id> \"your answer\"")
+    _console().print("\nanswer with: orc answer \"your answer\"  (oldest gate) or orc answer <gate-id> \"...\"")
 
 
 @app.command()
-def answer(gate_id: str, text: str) -> None:
+def answer(
+    gate_id: str | None = typer.Argument(None, help="gate id (or prefix); omit to answer interactively"),
+    text: str | None = typer.Argument(None, help="the answer; omit to be prompted"),
+) -> None:
     """Answer an agent's question; the project unparks on the next run."""
     svc = services()
+    # `orc answer "just do X"` — one argument means the text, aimed at the oldest gate
+    if gate_id is not None and text is None:
+        pairs = _all_gates(svc)
+        if len(pairs) == 1 or (pairs and not any(g.id.startswith(gate_id) for _, g in pairs)):
+            text = gate_id
+            gate_id = None
+    if gate_id is None and text is None:
+        from .interactive import prompt_gates
+
+        if prompt_gates(svc) == 0:
+            log.success("inbox zero — nothing is waiting on you")
+        return
+    if gate_id is None:
+        pairs = _all_gates(svc)
+        if not pairs:
+            raise typer.BadParameter("no open gates to answer")
+        proj, gate = pairs[0]
+        answered = proj.gates.answer(gate.id, text)
+        proj.journal.append(Kind.GATE_ANSWERED, actor="user", answer=text, question=answered.question)
+        log.success(f"answered the oldest gate on {proj.root.name} — `orc run` to continue")
+        return
     for proj in svc.registry.all_projects():
         try:
             gate = proj.gates.get(gate_id)
@@ -252,7 +291,7 @@ def answer(gate_id: str, text: str) -> None:
         proj.journal.append(Kind.GATE_ANSWERED, actor="user", answer=text, question=answered.question)
         log.success(f"answered {answered.id} on {proj.root.name} — `orc run` to continue")
         return
-    raise typer.BadParameter(f"no open gate matches {gate_id!r} (see `orc inbox`)")
+    raise typer.BadParameter(f"no open gate matches {gate_id!r} (see `orc inbox --list`)")
 
 
 @app.command()

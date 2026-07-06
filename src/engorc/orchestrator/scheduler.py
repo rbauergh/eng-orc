@@ -89,6 +89,7 @@ class Scheduler:
         slug: str | None = None,
         max_steps: int | None = None,
         watch: bool = False,
+        interactive: bool = False,
     ) -> int:
         """Drive projects until nothing is runnable (or budget/watch says stop).
         Returns the number of steps executed."""
@@ -104,9 +105,16 @@ class Scheduler:
                         log.info(f"stopped after {steps} step(s) (--max-steps)")
                         break
                     if slug is not None and not self.services.registry.get(slug).is_runnable():
-                        break
+                        if not interactive:
+                            break
                     continue
-                # nothing runnable right now
+                # Nothing runnable. In interactive mode, questions surface as
+                # inline prompts right here — answer and the loop resumes.
+                if interactive and log.console.is_terminal:
+                    from ..interactive import prompt_gates
+
+                    if prompt_gates(self.services) > 0:
+                        continue
                 if not watch:
                     break
                 time.sleep(self.config.scheduler.poll_seconds)

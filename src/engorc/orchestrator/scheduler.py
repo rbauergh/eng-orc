@@ -65,6 +65,7 @@ class Scheduler:
         from .supervisor import next_phase
 
         log.step(project_slug, f"→ {next_phase(project)} …")
+        self.services.observe_gpu()
         lock = FileLock(self.config.gpu_lock_path, timeout=self.config.scheduler.gpu_lock_timeout)
         lock.acquire(label=project_slug)
         try:
@@ -75,6 +76,7 @@ class Scheduler:
             log.error(f"[{project_slug}] {note}")
         finally:
             lock.release()
+            self.services.observe_gpu()
             meta = project.meta
             meta.last_active = iso_now()
             meta.bump(steps=1)

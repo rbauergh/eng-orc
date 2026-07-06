@@ -98,6 +98,10 @@ def test_any_blocking_seat_blocks_signoff_and_labels_findings(tmp_path, item):
     approved, blockers = panel_outcome(results)
     assert not approved
     assert [(lens, f.description) for lens, f in blockers] == [("adversarial", "crashes on empty name")]
+    # finding substance travels in the journal so watch/dashboard can show it
+    review_events = [e for e in project.journal.iter_events(kinds=["review"])]
+    blocking_event = [e for e in review_events if e.payload["verdict"] == "request_changes"]
+    assert blocking_event and "crashes on empty name" in blocking_event[0].payload["blockers"][0]
 
 
 def test_duplicate_findings_across_seats_are_deduped(tmp_path, item):

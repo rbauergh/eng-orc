@@ -17,6 +17,7 @@ from ..events import Journal
 from ..llm.client import LLMClient
 from ..llm.server import SwapServer
 from ..llm.structured import StructuredCaller
+from ..llm.timeline import GpuTimeline
 from ..memory.store import CompositeMemory, NullMemory, open_memory
 from ..obs.console import log
 from ..registry import Registry
@@ -44,6 +45,7 @@ class Services:
     registry: Registry
     memory: CompositeMemory | NullMemory
     swap: SwapServer
+    timeline: GpuTimeline
     _project_contexts: dict[str, ProjectContext] = dataclass_field(default_factory=dict)
 
     @classmethod
@@ -55,7 +57,15 @@ class Services:
             registry=Registry(config),
             memory=open_memory(config),
             swap=SwapServer(config.server),
+            timeline=GpuTimeline(config.home),
         )
+
+    def observe_gpu(self) -> None:
+        """Feed the GPU timeline from the swap server; never raises."""
+        try:
+            self.timeline.observe(self.swap.running_models())
+        except Exception as exc:
+            log.debug(f"gpu timeline observation skipped: {exc}")
 
     def caller(self, journal: Journal, actor: str) -> StructuredCaller:
         return StructuredCaller(self.client, journal=journal, actor=actor)

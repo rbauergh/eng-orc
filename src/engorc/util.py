@@ -52,6 +52,16 @@ def human_age(ts: str) -> str:
     return f"{seconds // 86400}d"
 
 
+def human_duration(seconds: float) -> str:
+    """Compact duration like '22s', '4m38s', '1h12m'."""
+    seconds = int(max(0, seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m{seconds % 60:02d}s"
+    return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+
+
 def slugify(text: str, max_len: int = 40) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     slug = re.sub(r"-{2,}", "-", slug)

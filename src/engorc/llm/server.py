@@ -85,6 +85,38 @@ class SwapServer:
                 names.add(model)
         return names
 
+    def slot_activity(self, model: str) -> tuple[int, int] | None:
+        """(busy_slots, tokens_decoded_in_flight) for a loaded model, from the
+        upstream llama-server /slots endpoint. None when unavailable — slot
+        JSON shape varies across versions, so parsing is defensive."""
+        try:
+            resp = self._http.get(f"/upstream/{model}/slots")
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        if not isinstance(data, list):
+            return None
+        busy = 0
+        tokens = 0
+        for slot in data:
+            if not isinstance(slot, dict):
+                continue
+            processing = slot.get("is_processing")
+            if processing is None:
+                state = slot.get("state")
+                processing = bool(state) and state not in (0, "idle")
+            if not processing:
+                continue
+            busy += 1
+            for key in ("n_decoded", "tokens_predicted", "n_past"):
+                value = slot.get(key)
+                if isinstance(value, (int, float)) and value > 0:
+                    tokens += int(value)
+                    break
+        return busy, tokens
+
     def unload_all(self) -> bool:
         """Frees VRAM (e.g. before the user wants the GPU for something else)."""
         for method, path in (("POST", "/api/models/unload"), ("GET", "/unload")):

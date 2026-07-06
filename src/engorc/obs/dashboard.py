@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from rich.console import Console, Group, RenderableType
 from rich.layout import Layout
@@ -25,9 +26,19 @@ from rich.live import Live
 from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from ..events import Event, Kind
-from ..util import human_age, shorten
+from ..util import human_age, human_duration, shorten, utc_now
+
+
+def _nowrap(markup: str) -> Text:
+    """Fixed-height panels must never wrap: a wrapped line would push the
+    newest content out of the cropped region. Ellipsize instead."""
+    text = Text.from_markup(markup)
+    text.no_wrap = True
+    text.overflow = "ellipsis"
+    return text
 
 
 def _turn_line(e: Event) -> str:
@@ -71,9 +82,12 @@ class Snapshot:
     projects_dir: str
     server_ok: bool
     server_url: str
-    resident: list[str] = field(default_factory=list)  # "model (state)"
     gpu: str = ""
     memory_backend: str = ""
+    gpu_current: list[dict] = field(default_factory=list)  # model/state/for_seconds
+    gpu_events: list[str] = field(default_factory=list)  # described timeline entries
+    gpu_live: str = ""  # "generating (~N tok)" | "idle"
+    gpu_io: str = ""  # token I/O over the last 5 minutes
     projects: list[tuple[str, ...]] = field(default_factory=list)
     now: list[NowLine] = field(default_factory=list)
     activity: list[str] = field(default_factory=list)
@@ -119,7 +133,7 @@ def _current_attempt_line(project, plan) -> NowLine | None:
     return NowLine(slug=project.root.name, text=" · ".join(parts))
 
 
-def gather_snapshot(services) -> Snapshot:
+def gather_snapshot(services, details: bool = False) -> Snapshot:
     config = services.config
     snapshot = Snapshot(
         profile=config.models.profile,
@@ -133,11 +147,22 @@ def gather_snapshot(services) -> Snapshot:
         snapshot.memory_backend = services.memory.health()[1]
     except Exception:
         snapshot.memory_backend = "unknown"
-    for entry in services.swap.running_models():
-        model = entry.get("model")
-        if model:
-            state = (entry.get("state") or "").lower() or "ready"
-            snapshot.resident.append(f"{model} ({state})")
+
+    # -- gpu: residency, swap history, and live token flow ------------------
+    services.observe_gpu()
+    snapshot.gpu_current = services.timeline.current()
+    snapshot.gpu_events = [services.timeline.describe(e) for e in services.timeline.recent(4)]
+    busy_bits: list[str] = []
+    for entry in snapshot.gpu_current:
+        if entry["state"] != "ready":
+            continue
+        activity = services.swap.slot_activity(entry["model"])
+        if activity and activity[0] > 0:
+            busy_bits.append(f"{entry['model']}: generating (~{activity[1]} tok in flight)")
+    snapshot.gpu_live = " · ".join(busy_bits) or "idle"
+
+    tokens_in = tokens_out = 0
+    cutoff = (utc_now() - timedelta(minutes=5)).isoformat(timespec="seconds")
 
     merged: list[tuple[str, str, Event]] = []
     for project in services.registry.all_projects():
@@ -163,13 +188,35 @@ def gather_snapshot(services) -> Snapshot:
             snapshot.now.append(now_line)
         for event in project.journal.tail(20):
             merged.append((event.ts, meta.slug, event))
+        for event in project.journal.iter_events(
+            kinds=[Kind.AGENT_TURN, Kind.STRUCTURED_CALL], since_ts=cutoff
+        ):
+            tokens_in += int(event.payload.get("prompt_tokens", 0) or 0)
+            tokens_out += int(event.payload.get("completion_tokens", 0) or 0)
 
+    snapshot.gpu_io = f"last 5m: {tokens_in:,} tok in / {tokens_out:,} tok out"
     merged.sort(key=lambda entry: entry[0])
-    for ts, slug, event in merged[-14:]:
+    expand_limit = None if details else 2
+    for ts, slug, event in merged[-16:]:
         formatter = EVENT_LINES.get(event.kind)
         if formatter is None:
             continue
         snapshot.activity.append(f"{ts[11:19]} {slug} · {formatter(event)}")
+        # reviews and finished attempts carry their substance in the payload —
+        # findings and handoff summaries indent under the event line
+        sublines: list[str] = []
+        if event.kind == Kind.REVIEW:
+            sublines = list(event.payload.get("blockers") or [])
+        elif event.kind == Kind.ATTEMPT_FINISHED:
+            sublines = list(event.payload.get("handoff") or [])
+        shown = sublines if expand_limit is None else sublines[:expand_limit]
+        for subline in shown:
+            snapshot.activity.append(f"         ↳ {shorten(str(subline), 150 if details else 110)}")
+        if expand_limit is not None and len(sublines) > expand_limit:
+            snapshot.activity.append(
+                f"         ↳ … {len(sublines) - expand_limit} more (orc dashboard --details)"
+            )
+    snapshot.activity = snapshot.activity[-(22 if details else 14):]
     return snapshot
 
 
@@ -179,7 +226,9 @@ def gather_snapshot(services) -> Snapshot:
 
 
 def _header_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
-    resident = ", ".join(s.resident) or "(nothing loaded)"
+    resident = ", ".join(
+        f"{e['model']} ({e['state']} {human_duration(e['for_seconds'])})" for e in s.gpu_current
+    ) or "(nothing loaded)"
     bits = [
         f"profile [bold]{escape(s.profile)}[/bold]",
         ("[green]server ok[/green]" if s.server_ok
@@ -188,16 +237,30 @@ def _header_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
     ]
     if s.gpu:
         bits.append(escape(s.gpu))
-    key = (s.profile, s.server_ok, tuple(s.resident), s.gpu)
-    return key, Panel(" · ".join(bits), title="eng-orc", title_align="left")
+    # residency in the key is minute-coarse so the header repaints ~once a
+    # minute while idle instead of every tick
+    key = (s.profile, s.server_ok, s.gpu,
+           tuple((e["model"], e["state"], int(e["for_seconds"] // 60)) for e in s.gpu_current))
+    return key, Panel(_nowrap(" · ".join(bits)), title="eng-orc", title_align="left")
+
+
+def _gpu_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    lines = [f"[bold]now[/bold]: {escape(s.gpu_live)} · {escape(s.gpu_io)}"]
+    lines += [escape(line) for line in s.gpu_events]
+    if len(lines) == 1 and not s.gpu_events:
+        lines.append("[dim](no swaps observed yet)[/dim]")
+    key = (s.gpu_live, s.gpu_io, tuple(s.gpu_events))
+    return key, Panel(_nowrap("\n".join(lines)), title="gpu timeline", title_align="left")
 
 
 def _projects_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
     if not s.projects:
         return ("empty",), Panel('no projects — orc new "<goal>"', title="projects", title_align="left")
-    table = Table(expand=True, show_edge=False, pad_edge=False)
+    # box=None: a header-separator line would not fit the fixed region height;
+    # no_wrap columns: a wrapped row would crop the rows below it
+    table = Table(expand=True, box=None, pad_edge=False)
     for column in ("project", "pri", "phase", "state", "plan", "gates", "active"):
-        table.add_column(column)
+        table.add_column(column, no_wrap=True, overflow="ellipsis")
     for row in s.projects:
         table.add_row(*(escape(cell) for cell in row))
     return tuple(s.projects), Panel(table, title="projects", title_align="left")
@@ -208,25 +271,29 @@ def _now_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
         f"[bold]{escape(line.slug)}[/bold] · {escape(line.text)}" for line in s.now
     ) or "[dim]idle — no attempt in flight[/dim]"
     key = tuple((line.slug, line.text) for line in s.now)
-    return key, Panel(text, title="working now", title_align="left")
+    return key, Panel(_nowrap(text), title="working now", title_align="left")
 
 
 def _activity_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
     text = "\n".join(escape(line) for line in s.activity) or "[dim](no activity yet)[/dim]"
-    return tuple(s.activity), Panel(text, title="recent activity", title_align="left")
+    return tuple(s.activity), Panel(_nowrap(text), title="recent activity", title_align="left")
 
 
 def _footer_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
-    bits = [f"projects live in {escape(s.projects_dir)}"]
+    # ordered by importance: the ellipsis eats from the right, so the
+    # truncatable path goes last and the call-to-action goes first
+    bits = []
     if s.open_gates:
         bits.append(f"[yellow]{s.open_gates} question(s) waiting — orc inbox[/yellow]")
-    bits.append(f"memory: {escape(shorten(s.memory_backend, 50))}")
+    bits.append(f"memory: {escape(shorten(s.memory_backend, 40))}")
+    bits.append(f"projects live in {escape(s.projects_dir)}")
     key = (s.projects_dir, s.open_gates, s.memory_backend)
-    return key, Panel(" · ".join(bits) + " · Ctrl-C exits", title_align="left")
+    return key, Panel(_nowrap(" · ".join(bits) + " · Ctrl-C exits"), title_align="left")
 
 
 _REGIONS = {
     "header": _header_panel,
+    "gpu": _gpu_panel,
     "projects": _projects_panel,
     "now": _now_panel,
     "activity": _activity_panel,
@@ -243,6 +310,7 @@ def _build_layout(snapshot: Snapshot) -> Layout:
     layout = Layout()
     layout.split_column(
         Layout(name="header", size=3),
+        Layout(name="gpu", size=7),  # now-line + up to 4 timeline entries
         Layout(name="projects", size=_projects_size(snapshot)),
         Layout(name="now", size=_now_size(snapshot)),
         Layout(name="activity"),  # takes the remaining height
@@ -252,7 +320,8 @@ def _build_layout(snapshot: Snapshot) -> Layout:
 
 
 def _projects_size(s: Snapshot) -> int:
-    return min(max(len(s.projects), 1), 10) + 3  # rows + header line + borders
+    # borders (2) + column headers (1) + rows + one slack line
+    return min(max(len(s.projects), 1), 10) + 4
 
 
 def _now_size(s: Snapshot) -> int:
@@ -260,13 +329,13 @@ def _now_size(s: Snapshot) -> int:
 
 
 def run_dashboard(services, interval: float = 2.0, once: bool = False,
-                  console: Console | None = None) -> None:
+                  details: bool = False, console: Console | None = None) -> None:
     console = console or Console()
     if once or not console.is_terminal:
-        console.print(render(gather_snapshot(services)))
+        console.print(render(gather_snapshot(services, details=details)))
         return
 
-    snapshot = gather_snapshot(services)
+    snapshot = gather_snapshot(services, details=details)
     layout = _build_layout(snapshot)
     keys: dict[str, tuple] = {}
     sizes = (_projects_size(snapshot), _now_size(snapshot))
@@ -296,7 +365,7 @@ def run_dashboard(services, interval: float = 2.0, once: bool = False,
             live.refresh()
             while True:
                 time.sleep(max(0.5, interval))
-                if apply(gather_snapshot(services)):
+                if apply(gather_snapshot(services, details=details)):
                     live.refresh()
     except KeyboardInterrupt:
         pass

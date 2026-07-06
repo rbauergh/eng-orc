@@ -77,6 +77,7 @@ def phase_scout(services: Services, project: Project) -> str:
 
 def phase_charter(services: Services, project: Project) -> str:
     config = services.config
+    log.agent("charterer", "drafting the charter …")
     sections, consumed_gate_ids = briefs.charter_brief(services, project)
     caller = services.caller(project.journal, "charterer")
     try:
@@ -152,6 +153,7 @@ def phase_charter(services: Services, project: Project) -> str:
 
 def phase_design(services: Services, project: Project) -> str:
     config = services.config
+    log.agent("architect", "writing the design document …")
     design_md, usage = one_shot_prose(
         services.client,
         model_for_agent(config, "architect"),
@@ -226,6 +228,7 @@ def _draft_to_plan(draft: PlanDraft) -> Plan:
 
 def phase_plan(services: Services, project: Project) -> str:
     config = services.config
+    log.agent("planner", "breaking the design into work items …")
     caller = services.caller(project.journal, "planner")
     errors: list[str] | None = None
     for _round in range(2):
@@ -263,6 +266,19 @@ def _needs_tester(item: WorkItem) -> bool:
     if "test_first" not in item.notes:
         return False
     return not any(a.role == "tester" and a.outcome == "success" for a in item.attempts)
+
+
+def _handoff_excerpt(handoff_md: str, max_lines: int = 6) -> list[str]:
+    """The meat of a handoff note: content lines, headers and blanks dropped."""
+    lines = []
+    for raw in handoff_md.splitlines():
+        stripped = raw.strip().lstrip("#").strip()
+        if not stripped:
+            continue
+        lines.append(shorten(stripped, 140))
+        if len(lines) >= max_lines:
+            break
+    return lines
 
 
 def implementer_model_role(config, prior_failures: int) -> str:
@@ -311,6 +327,7 @@ def _run_item_loop(
         f"(attempt {len(item.attempts)}/{config.run.max_attempts_per_item}, model {role_model.model})",
     )
 
+    services.observe_gpu()
     ctx = ToolContext(
         project=project,
         config=config,
@@ -353,13 +370,20 @@ def _run_item_loop(
         "error": "error",
         "blocked_on_user": "fail",
     }[result.status]
+    handoff_lines = _handoff_excerpt(result.handoff_md) if result.handoff_md else []
     project.journal.append(
         Kind.ATTEMPT_FINISHED,
         actor=role_name,
         item=item.id,
         status=result.status,
         summary=shorten(result.summary, 300),
+        handoff=handoff_lines,
     )
+    # The tester's "behaviors I encoded" and the implementer's "what I built"
+    # live in their handoff notes — narrate them instead of burying them.
+    if result.status == "done" and handoff_lines:
+        for line in handoff_lines:
+            log.info(f"    ↳ {line}")
     if result.handoff_md:
         handoff = Handoff(
             from_role=role_name,
@@ -429,10 +453,20 @@ def run_review_panel(
             project.journal.append(Kind.ERROR, actor=actor, item=item.id,
                                    error=f"panel seat unavailable: {str(exc)[:300]}")
             continue
+        blocker_lines = [
+            f"{f.category}/{f.severity}: {shorten(f.description, 120)} → {shorten(f.recommendation, 80)}"
+            for f in verdict.blockers()
+        ]
         project.journal.append(
             Kind.REVIEW, item=item.id, verdict=verdict.verdict,
             findings=len(verdict.findings), lens=seat.lens, model=role_model.model,
+            blockers=blocker_lines,
         )
+        log.agent(actor, f"{verdict.verdict} — {len(verdict.findings)} finding(s): "
+                         f"{shorten(verdict.summary, 90)}")
+        for line in blocker_lines:
+            log.info(f"    ↳ {line}")
+        services.observe_gpu()  # panel seats are where swaps happen mid-step
         review_md = [f"# Review — {verdict.verdict}",
                      f"_lens: {seat.lens} · model: {role_model.model}_", "", verdict.summary, ""]
         for finding in verdict.findings:
@@ -558,6 +592,10 @@ def phase_build(services: Services, project: Project) -> str:
     project.journal.append(Kind.VERIFY_RUN, item=item.id, passed=report.passed,
                            summary=report.summary())
     if not report.passed:
+        log.warn(
+            f"verify failed on '{shorten(item.title, 40)}': "
+            f"{shorten(report.failure_detail(600), 160)}"
+        )
         attempt.outcome = "fail"
         attempt.test_summary = truncate_middle(report.summary() + "\n" + report.failure_detail(), 2000)
         item.notes.append(f"verification failed after 'done': {shorten(report.failure_detail(800), 300)}")
@@ -608,6 +646,7 @@ def phase_build(services: Services, project: Project) -> str:
 
 def phase_wrap(services: Services, project: Project) -> str:
     config = services.config
+    log.agent("historian", "digesting the project into memory …")
     plan = project.load_plan()
     progress = plan.progress()
     digest_source = "\n\n".join(

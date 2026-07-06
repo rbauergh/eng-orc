@@ -46,6 +46,21 @@ orc pause <slug> / orc resume <slug> / orc abandon <slug>
 orc report <slug>        # the wrap-up report
 ```
 
+Watching it work:
+- `orc dashboard` (second terminal) — top-style live view: profile, GPU
+  utilization, the **gpu timeline** (which model is resident and for how
+  long, load/unload history with durations, live token flow while
+  generating), per-project status, the in-flight attempt with its turn
+  counter, and an activity feed with review findings and tester/implementer
+  handoff summaries inlined. `--details` expands every finding; `--once`
+  prints a single snapshot.
+- `orc run --watch` narrates phases, attempt starts (role/model/attempt
+  count), reviewer verdicts with their blocking findings, verify failures,
+  and finished attempts' handoff summaries; add `--verbose` for
+  tool-by-tool turn lines.
+- `orc models` shows the configured roles plus current residency and the
+  recent gpu timeline.
+
 Habits that pay off:
 - **Edit `plan.yaml` freely between runs** — reprioritize, drop items, tighten
   acceptance criteria; the graph is validated on load.

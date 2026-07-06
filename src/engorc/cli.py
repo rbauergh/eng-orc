@@ -95,10 +95,14 @@ def run(
     max_steps: int | None = typer.Option(None, help="stop after N phase steps"),
     watch: bool = typer.Option(False, "--watch", help="keep polling for unparked work instead of exiting"),
     once: bool = typer.Option(False, "--once", help="run exactly one step"),
+    verbose: bool = typer.Option(False, "--verbose", "-v",
+                                 help="narrate every agent turn (tool-by-tool)"),
 ) -> None:
     """Advance projects: one phase unit at a time, GPU-fair, park on questions."""
     from .orchestrator.scheduler import Scheduler
 
+    if verbose:
+        log.set_level("debug")
     scheduler = Scheduler(services())
     scheduler.run(slug=project, max_steps=1 if once else max_steps, watch=watch)
 
@@ -147,11 +151,13 @@ def ask(project: str, note: str) -> None:
 def dashboard(
     interval: float = typer.Option(2.0, help="refresh seconds"),
     once: bool = typer.Option(False, "--once", help="print one snapshot and exit"),
+    details: bool = typer.Option(False, "--details", "-d",
+                                 help="expand all review findings and handoff summaries in the feed"),
 ) -> None:
     """Live top-style view: resident model, GPU, projects, current work, activity."""
     from .obs.dashboard import run_dashboard
 
-    run_dashboard(services(), interval=interval, once=once)
+    run_dashboard(services(), interval=interval, once=once, details=details)
 
 
 @app.command()
@@ -349,8 +355,17 @@ def models(unload: bool = typer.Option(False, help="unload whatever is resident 
     if svc.client.health():
         served = ", ".join(svc.client.model_ids()) or "(none)"
         log.success(f"server up at {svc.config.server.base_url} — serving: {served}")
-        loaded = svc.swap.loaded_model()
-        log.info(f"resident on GPU now: {loaded or '(nothing loaded)'}")
+        svc.observe_gpu()
+        from .util import human_duration
+
+        for entry in svc.timeline.current():
+            log.info(f"resident: {entry['model']} ({entry['state']} for "
+                     f"{human_duration(entry['for_seconds'])})")
+        events = svc.timeline.recent(6)
+        if events:
+            log.info("gpu timeline:")
+            for event in events:
+                log.info(f"  {svc.timeline.describe(event)}")
     else:
         log.warn(f"server not reachable at {svc.config.server.base_url}")
 

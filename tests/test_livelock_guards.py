@@ -100,6 +100,28 @@ def test_verification_failure_still_fails_empty_attempts(config):
     assert refreshed.attempts[-1].outcome == "fail"
 
 
+def test_idle_explanation_names_wrapped_and_parked_projects(config, monkeypatch):
+    """`orc run` with every project terminal must say WHY it is idle and how
+    to proceed, not silently exit ('orc run now does nothing')."""
+    import engorc.orchestrator.scheduler as scheduler_module
+
+    messages: list[str] = []
+    monkeypatch.setattr(scheduler_module.log, "info", messages.append)
+    services = Services.build(config, client=FakeLLM(lambda *a: "unused"))
+    registry = Registry(config)
+    done_project = registry.create("finished mission", title="F")
+    done_project.set_state("done", reason="mission wrapped")
+
+    Scheduler(services).run(watch=False)
+    assert any("wrapped" in m and "orc request" in m for m in messages)
+
+    parked = registry.create("parked mission", title="P")
+    parked.set_state("blocked_on_user", reason="loop guard tripped")
+    messages.clear()
+    Scheduler(services).run(watch=False)
+    assert any("parked (loop guard tripped)" in m and "orc resume" in m for m in messages)
+
+
 def test_scheduler_loop_guard_parks_repeating_project(config, monkeypatch):
     """Belt and braces: whatever future bug produces an identical step note
     forever, the scheduler parks the project instead of spinning."""

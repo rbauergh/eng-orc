@@ -21,7 +21,12 @@ def test_apply_profile_replaces_models_and_merges_run(tmp_path):
     }))
 
     applied = apply_profile_to_config(profile_path, config_path)
-    assert set(applied) == {"models", "review", "run"}
+    assert applied == {"models": True, "review": True, "run": True}
+    # a second run is a no-op and says so — "sync didn't change anything"
+    # must be a visible fact, not a guess
+    assert apply_profile_to_config(profile_path, config_path) == {
+        "models": False, "review": False, "run": False,
+    }
     merged = yaml.safe_load(config_path.read_text())
     assert merged["models"]["profile"] == "new"            # profile owns models
     assert merged["review"]["panel"][0]["lens"] == "correctness"

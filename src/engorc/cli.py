@@ -98,13 +98,19 @@ def sync(
 
     swap_config = Path.home() / ".config" / "llama-swap" / "config.yaml"
     ensure_dir(swap_config.parent)
+    profile_swap = (profile_dir / "llama-swap.yaml").read_text(encoding="utf-8")
+    swap_changed = (not swap_config.exists()
+                    or swap_config.read_text(encoding="utf-8") != profile_swap)
     _shutil.copyfile(profile_dir / "llama-swap.yaml", swap_config)
-    log.success(f"llama-swap config ← server/profiles/{name}")
+    log.success(f"llama-swap config ← server/profiles/{name} "
+                f"({'updated' if swap_changed else 'already in sync'})")
 
     if not config.config_path.exists():
         init()
     applied = apply_profile_to_config(profile_dir / "orc-models.yaml", config.config_path)
-    log.success(f"~/.eng-orc/config.yaml ← profile sections: {', '.join(applied)}")
+    summary = ", ".join(f"{key} ({'updated' if changed else 'already in sync'})"
+                        for key, changed in applied.items())
+    log.success(f"~/.eng-orc/config.yaml ← {summary}")
 
     restarted = False
     try:

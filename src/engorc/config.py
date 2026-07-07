@@ -272,24 +272,25 @@ def reset_config_cache() -> None:
     get_config.cache_clear()
 
 
-def apply_profile_to_config(profile_yaml: Path, config_path: Path) -> list[str]:
+def apply_profile_to_config(profile_yaml: Path, config_path: Path) -> dict[str, bool]:
     """Merge a profile's orc-models.yaml into the user config: models and
     review are owned by the profile (replaced); run keys are merged
-    individually so user tuning survives. Returns the keys applied."""
+    individually so user tuning survives. Returns each applied section
+    mapped to whether it actually changed the config."""
     import yaml
 
     profile = yaml.safe_load(profile_yaml.read_text(encoding="utf-8")) or {}
     data = read_yaml(config_path, default={}) or {}
-    applied: list[str] = []
+    applied: dict[str, bool] = {}
     for key in ("models", "review"):
         if key in profile:
+            applied[key] = data.get(key) != profile[key]
             data[key] = profile[key]
-            applied.append(key)
     if "run" in profile:
         merged_run = dict(data.get("run") or {})
         merged_run.update(profile["run"])
+        applied["run"] = (data.get("run") or {}) != merged_run
         data["run"] = merged_run
-        applied.append("run")
     from .fsio import atomic_write_text
 
     atomic_write_text(config_path, yaml.safe_dump(data, sort_keys=False, allow_unicode=True))

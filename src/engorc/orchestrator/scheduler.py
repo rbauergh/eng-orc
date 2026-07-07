@@ -151,7 +151,9 @@ class Scheduler:
 
     def _explain_idle(self) -> None:
         gates = 0
-        blocked = []
+        blocked: list[str] = []
+        parked: list[tuple[str, str]] = []
+        wrapped: list[str] = []
         for project in self.services.registry.all_projects():
             try:
                 meta = project.meta
@@ -160,11 +162,28 @@ class Scheduler:
             open_gates = project.gates.open_gates()
             gates += len(open_gates)
             if meta.state == "blocked_on_user":
-                blocked.append(meta.slug)
+                if open_gates:
+                    blocked.append(meta.slug)
+                else:
+                    parked.append((meta.slug, meta.state_reason or "no open questions"))
+            elif meta.state == "paused":
+                parked.append((meta.slug, "paused"))
+            elif meta.state == "done":
+                wrapped.append(meta.slug)
         if gates:
             log.info(
                 f"nothing runnable: {gates} open question(s) across {len(blocked)} project(s) — "
                 "`orc inbox` to answer"
+            )
+        for slug, reason in parked:
+            log.info(f"[{slug}] parked ({reason}) — `orc resume {slug}` to requeue it")
+        if gates or parked:
+            return
+        if wrapped:
+            log.info(
+                f"nothing runnable: all {len(wrapped)} project(s) are wrapped "
+                f"({', '.join(wrapped)}) — `orc request <project> \"<change>\"` reopens one, "
+                "`orc new \"<goal>\"` starts fresh"
             )
         else:
             log.info("nothing runnable — `orc new \"<goal>\"` to start a project")

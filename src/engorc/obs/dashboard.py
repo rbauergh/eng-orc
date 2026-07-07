@@ -45,8 +45,12 @@ def _nowrap(markup: str) -> Text:
 
 
 def _turn_line(e: Event) -> str:
-    suffix = "" if e.payload.get("ok") else " · FAILED"
-    return f"{e.actor}: turn {e.payload.get('turn')} · {e.payload.get('tool')}{suffix}"
+    if e.payload.get("ok"):
+        return f"{e.actor}: turn {e.payload.get('turn')} · {e.payload.get('tool')}"
+    # a failed turn says WHY — 'FAILED' alone is a question, not information
+    detail = str(e.payload.get("detail", "")).replace("\n", " ").strip()
+    suffix = f" — {shorten(detail, 90)}" if detail else ""
+    return f"{e.actor}: turn {e.payload.get('turn')} · {e.payload.get('tool')} · FAILED{suffix}"
 
 
 EVENT_LINES = {
@@ -56,7 +60,10 @@ EVENT_LINES = {
     Kind.ATTEMPT_FINISHED: lambda e: (
         f"{e.actor} {e.payload.get('status')}: {shorten(e.payload.get('summary', ''), 70)}"
     ),
-    Kind.VERIFY_RUN: lambda e: f"verify: {'PASS' if e.payload.get('passed') else 'FAIL'}",
+    Kind.VERIFY_RUN: lambda e: (
+        "verify: PASS" if e.payload.get("passed")
+        else f"verify: FAIL — {shorten(str(e.payload.get('summary', '')), 90)}"
+    ),
     Kind.REVIEW: lambda e: (
         f"review[{e.payload.get('lens', '?')}] {e.payload.get('verdict')} "
         f"({e.payload.get('findings', 0)} findings)"

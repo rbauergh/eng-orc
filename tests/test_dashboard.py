@@ -25,7 +25,8 @@ def test_snapshot_covers_projects_now_and_activity(config):
     item.attempts.append(AttemptRecord(role="implementer", model="coder"))
     project.save_plan(Plan(items=[item]))
     project.journal.append(Kind.AGENT_TURN, actor="implementer", item=item.id, turn=3,
-                           tool="run_tests", ok=False)
+                           tool="run_tests", ok=False,
+                           detail="exit code 1: AssertionError: expected 7 columns, got 6")
     project.journal.append(Kind.STEP, phase="build", note="working on the [core] module")
     project.gates.open("pick a [database]?", from_role="charterer")
 
@@ -48,7 +49,8 @@ def test_snapshot_covers_projects_now_and_activity(config):
     assert snapshot.open_gates == 1
     assert any(row[0] == project.root.name for row in snapshot.projects)
     assert snapshot.now and "implement the [core]" in snapshot.now[0].text
-    assert any("run_tests" in line and "FAILED" in line for line in snapshot.activity)
+    assert any("run_tests" in line and "FAILED" in line
+               and "expected 7 columns" in line for line in snapshot.activity)
 
     # review blockers and handoff summaries indent under their event lines
     assert any("crashes on empty input" in line for line in snapshot.activity)

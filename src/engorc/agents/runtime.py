@@ -242,7 +242,8 @@ class ToolLoop:
                     "before, it will not work now — change your approach."
                 )
             turns.append(_Turn(assistant=raw_reply, observation=observation))
-            self._journal_turn(turn_no, action.tool, result.ok, response.usage)
+            self._journal_turn(turn_no, action.tool, result.ok, response.usage,
+                               detail="" if result.ok else result.output)
 
             if terminal in ("done", "failed"):
                 result_status = terminal
@@ -340,7 +341,8 @@ class ToolLoop:
         return summary, recent
 
     # -- bookkeeping ----------------------------------------------------------
-    def _journal_turn(self, turn: int, tool: str, ok: bool, usage: LLMUsage) -> None:
+    def _journal_turn(self, turn: int, tool: str, ok: bool, usage: LLMUsage,
+                      detail: str = "") -> None:
         self.journal.append(
             Kind.AGENT_TURN,
             actor=self.role_name,
@@ -348,6 +350,7 @@ class ToolLoop:
             turn=turn,
             tool=tool,
             ok=ok,
+            detail=shorten(detail, 160) if detail else "",
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,
         )

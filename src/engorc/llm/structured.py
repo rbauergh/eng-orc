@@ -131,12 +131,13 @@ class StructuredCaller:
 
         last_text = ""
         errors = ""
+        effective_max = max_tokens if max_tokens is not None else role_model.max_output_tokens
         for round_no in range(repair_rounds + 1):
             result: LLMResult = self.client.chat(
                 role_model,
                 convo,
                 response_format=response_format,
-                max_tokens=max_tokens,
+                max_tokens=effective_max,
             )
             self.usage += result.usage
             last_text = result.text
@@ -151,16 +152,26 @@ class StructuredCaller:
                 return parsed
             except (json.JSONDecodeError, ValidationError) as exc:
                 errors = str(exc)[:1500]
+                if result.finish_reason == "length":
+                    # a truncated reply is a budget problem, not a comprehension
+                    # problem — quoting validator errors back cannot fix it.
+                    # Grow the budget and ask for terser reasoning instead.
+                    effective_max = int(effective_max * 1.5)
+                    errors = f"reply hit the output token budget before completing; {errors}"
+                    repair = (
+                        "Your reply was cut off by the output token budget before the JSON "
+                        "completed. Respond again with ONLY the JSON object; keep the "
+                        "`reasoning` field under 60 words."
+                    )
+                else:
+                    repair = (
+                        "That response failed validation:\n"
+                        f"{errors}\n\n"
+                        "Respond again with ONLY a corrected JSON object matching the schema."
+                    )
                 convo = convo + [
                     {"role": "assistant", "content": result.text[:4000]},
-                    {
-                        "role": "user",
-                        "content": (
-                            "That response failed validation:\n"
-                            f"{errors}\n\n"
-                            "Respond again with ONLY a corrected JSON object matching the schema."
-                        ),
-                    },
+                    {"role": "user", "content": repair},
                 ]
         self._journal(schema, ok=False, rounds=repair_rounds + 1, error=errors)
         raise StructuredError(

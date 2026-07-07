@@ -343,12 +343,25 @@ def _needs_tester(item: WorkItem) -> bool:
     return not any(a.role == "tester" and a.outcome == "success" for a in item.attempts)
 
 
+def _revive_item(item: WorkItem, guidance: str) -> None:
+    """Archive the recent attempt summaries as notes, attach the user's
+    guidance, and return the item to the todo queue with a fresh budget."""
+    for attempt in item.attempts[-2:]:
+        if attempt.summary:
+            item.notes.append(f"earlier attempt ({attempt.role}): {shorten(attempt.summary, 160)}")
+    item.notes.append(f"user guidance: {shorten(guidance, 300)}")
+    item.attempts = []
+    item.status = "todo"
+    item.touch()
+
+
 def _absorb_supervisor_guidance(project: Project, plan: Plan) -> bool:
     """User answers to the supervisor's stuck-item gate become actionable:
     failed items get the guidance as notes (with the failed attempts' summaries
     preserved) and a fresh attempt budget. This is what makes answering the
     gate meaningfully different from re-running into the same wall."""
-    answers = [g for g in project.unconsumed_answers() if g.from_role == "supervisor"]
+    answers = [g for g in project.unconsumed_answers()
+               if g.from_role == "supervisor" and g.phase != "wrap"]
     if not answers:
         return False
     changed = False
@@ -356,13 +369,7 @@ def _absorb_supervisor_guidance(project: Project, plan: Plan) -> bool:
         for item in plan.items:
             if item.status != "failed":
                 continue
-            for attempt in item.attempts[-2:]:
-                if attempt.summary:
-                    item.notes.append(f"earlier attempt ({attempt.role}): {shorten(attempt.summary, 160)}")
-            item.notes.append(f"user guidance: {shorten(gate.answer, 300)}")
-            item.attempts = []
-            item.status = "todo"
-            item.touch()
+            _revive_item(item, gate.answer)
             changed = True
         project.journal.append(Kind.USER_NOTE, actor="user",
                                note=f"guidance on stuck items: {gate.answer}")
@@ -1023,10 +1030,76 @@ def phase_build(services: Services, project: Project) -> str:
 # --------------------------------------------------------------------------- wrap
 
 
+WRAP_CONFIRMED_NOTE = "user confirmed finishing without this item"
+
+_AFFIRMATIVE_STARTS = ("finish", "wrap", "yes", "y", "ok", "okay", "done", "proceed",
+                       "ship", "close", "confirm", "sure", "fine")
+
+
+def _is_affirmative(answer: str) -> bool:
+    first_word = (answer.strip().lower().split() or [""])[0].strip(".,!")
+    return first_word in _AFFIRMATIVE_STARTS
+
+
+def _unconfirmed_drops(plan: Plan) -> list[WorkItem]:
+    return [i for i in plan.items_in_status("dropped") if WRAP_CONFIRMED_NOTE not in i.notes]
+
+
+def _absorb_wrap_answers(project: Project, plan: Plan) -> str | None:
+    """Consume answers to the wrap sign-off gate: an affirmative marks the
+    dropped items confirmed and the wrap proceeds; anything else is guidance —
+    the dropped items come back to the todo queue carrying it. Returns a step
+    note when work resumed, None when wrapping may continue."""
+    answers = [g for g in project.unconsumed_answers()
+               if g.from_role == "supervisor" and g.phase == "wrap"]
+    if not answers:
+        return None
+    project.mark_gates_consumed([g.id for g in answers])
+    answer = answers[-1].answer
+    dropped = _unconfirmed_drops(plan)
+    if _is_affirmative(answer):
+        for item in dropped:
+            item.notes.append(WRAP_CONFIRMED_NOTE)
+            item.touch()
+        project.save_plan(plan)
+        project.journal.append(Kind.USER_NOTE, actor="user",
+                               note=f"confirmed wrapping without {len(dropped)} dropped item(s)")
+        return None
+    for item in dropped:
+        _revive_item(item, answer)
+    project.save_plan(plan)
+    project.journal.append(Kind.USER_NOTE, actor="user",
+                           note=f"revived {len(dropped)} dropped item(s): {answer}")
+    log.info(f"reviving {len(dropped)} dropped item(s) with your guidance")
+    return f"revived {len(dropped)} dropped item(s) with your guidance; back to work"
+
+
 def phase_wrap(services: Services, project: Project) -> str:
     config = services.config
-    log.agent("historian", "digesting the project into memory …")
     plan = project.load_plan()
+    revived = _absorb_wrap_answers(project, plan)
+    if revived:
+        return revived
+    # A model may DROP an item, but only the user closes a mission that
+    # shipped without it — the dashboard's "3/4 done" must never become
+    # "done (mission wrapped)" silently.
+    pending = _unconfirmed_drops(plan)
+    if pending:
+        if not any(g.from_role == "supervisor" and g.phase == "wrap"
+                   for g in project.gates.open_gates()):
+            titles = "; ".join(shorten(i.title, 80) for i in pending)
+            project.gates.open(
+                question=(f"All runnable work is finished, but {len(pending)} item(s) were "
+                          f"dropped along the way: {titles}. Should I finish without them, "
+                          "or revive them (tell me what to change)?"),
+                from_role="supervisor",
+                phase="wrap",
+                options=["finish without them", "revive them and continue"],
+            )
+        project.set_state("blocked_on_user", reason="dropped items need your sign-off")
+        return "everything runnable is done, but dropped items need your sign-off (see `orc inbox`)"
+
+    log.agent("historian", "digesting the project into memory …")
     progress = plan.progress()
     digest_source = "\n\n".join(
         [
@@ -1075,22 +1148,21 @@ def phase_wrap(services: Services, project: Project) -> str:
     project.journal.append(Kind.MEMORY_SAVED, kinds="lessons+card", count=lessons_kept + 1)
 
     done = progress.get("done", 0)
-    failed = progress.get("failed", 0) + progress.get("dropped", 0)
-    report = "\n".join(
-        [
-            f"# Final report — {project.meta.title}",
-            f"_{iso_now()}_",
-            "",
-            f"Work items: {done} done, {failed} failed/dropped, {progress.get('total', 0)} total.",
-            "",
-            "## Summary",
-            summary_text,
-            "",
-            "## Decisions",
-            project.decisions.render_markdown(),
-        ]
-    )
-    project.artifacts.write("report.md", report)
+    dropped_items = plan.items_in_status("dropped")
+    lines = [
+        f"# Final report — {project.meta.title}",
+        f"_{iso_now()}_",
+        "",
+        f"Work items: {done} done, {len(dropped_items)} dropped, {progress.get('total', 0)} total.",
+        "",
+        "## Summary",
+        summary_text,
+    ]
+    if dropped_items:
+        lines += ["", "## Dropped (finished without these, per your sign-off)"]
+        lines += [f"- {item.title}" for item in dropped_items]
+    lines += ["", "## Decisions", project.decisions.render_markdown()]
+    project.artifacts.write("report.md", "\n".join(lines))
     if hasattr(services.memory, "curate") and config.memory.curate_with_agent:
         services.memory.curate(summary_text)
     if hasattr(services.memory, "sync"):
@@ -1098,7 +1170,9 @@ def phase_wrap(services: Services, project: Project) -> str:
 
     project.set_phase("done")
     project.set_state("done", reason="mission wrapped")
-    return f"project wrapped: {done}/{progress.get('total', 0)} items done — report.md written"
+    dropped_note = f", {len(dropped_items)} dropped" if dropped_items else ""
+    return (f"project wrapped: {done}/{progress.get('total', 0)} items done{dropped_note}"
+            " — report.md written")
 
 
 PHASES = {

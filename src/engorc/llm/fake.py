@@ -50,13 +50,19 @@ class FakeLLM:
         extra_body: dict | None = None,
     ) -> LLMResult:
         reply = self.brain(messages, response_format, role_model)
-        # a brain may return (text, reasoning) to simulate reasoning-channel models
-        text, reasoning = reply if isinstance(reply, tuple) else (reply, "")
+        # a brain may return (text, reasoning) or (text, reasoning, finish_reason)
+        # to simulate reasoning-channel models and output-budget truncation
+        text, reasoning, finish = reply, "", "stop"
+        if isinstance(reply, tuple):
+            text = reply[0]
+            reasoning = reply[1] if len(reply) > 1 else ""
+            finish = reply[2] if len(reply) > 2 else "stop"
         self.calls.append(
             {
                 "model": role_model.model,
                 "schema": _schema_name(response_format),
                 "system_head": (messages[0]["content"].splitlines() or [""])[0] if messages else "",
+                "max_tokens": max_tokens,
             }
         )
         if stream_cb is not None:
@@ -67,7 +73,7 @@ class FakeLLM:
             reasoning=reasoning,
             model=role_model.model,
             usage=LLMUsage(prompt_tokens=prompt_tokens, completion_tokens=approx_tokens(text)),
-            finish_reason="stop",
+            finish_reason=finish,
         )
 
     def embeddings(self, texts: list[str], model: str) -> list[list[float]]:

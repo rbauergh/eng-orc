@@ -33,7 +33,8 @@ models:
     second-opinion:                 # gpt-oss-20b — OpenAI lineage
       model: coder-fast
       context_window: 16384
-      max_output_tokens: 3072
+      max_output_tokens: 4096       # high reasoning needs the headroom, else
+                                    # verdicts truncate into empty replies
       temperature: 1.0
       top_p: 1.0
       thinking: true

@@ -99,6 +99,21 @@ def test_structured_answer_recovered_from_reasoning_channel():
     assert result.ok is True
 
 
+def test_truncated_reply_grows_budget_then_recovers():
+    """Regression: the planner hit its output budget mid-JSON ('Unterminated
+    string starting at char 17') and every repair round retried with the SAME
+    budget — three identical truncations. A length finish now grows it."""
+    replies = iter([('{"reasoning": "cut off mid-str', "", "length"),
+                    '{"reasoning": "terse", "ok": true}'])
+    client = FakeLLM(lambda *a: next(replies))
+    caller = StructuredCaller(client)
+    result = caller.call(RoleModel(model="m", max_output_tokens=1000), Verdict,
+                         [{"role": "user", "content": "judge"}])
+    assert result.ok is True
+    assert client.calls[0]["max_tokens"] == 1000
+    assert client.calls[1]["max_tokens"] == 1500
+
+
 def test_tool_loop_reply_recovered_from_reasoning_channel():
     from engorc.agents.runtime import parse_action
     from engorc.llm.structured import strip_thinking

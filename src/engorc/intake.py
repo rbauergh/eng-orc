@@ -24,6 +24,7 @@ from .llm.budget import Section
 from .llm.catalog import model_for_agent
 from .llm.structured import StructuredCaller
 from .obs.console import log
+from .sessions import interactive_session
 from .util import iso_now, shorten
 
 
@@ -57,7 +58,8 @@ def _sections(seed: str | None, spec: str, dialogue: list[tuple[str, str]]) -> l
 
 
 def run_intake(services, seed: str | None = None,
-               console: Console | None = None) -> IntakeResult | None:
+               console: Console | None = None,
+               detail: str = "orc new -i") -> IntakeResult | None:
     """Returns the finished spec, or None when the user quits."""
     console = console or log.console
     config = services.config
@@ -71,6 +73,14 @@ def run_intake(services, seed: str | None = None,
     console.print("[bold]Project intake[/bold] — answer, defer ('whatever you want'), "
                   "'show' prints the spec, 'done' finalizes, 'quit' aborts.")
 
+    with interactive_session(config.home, "intake", detail) as session:
+        return _intake_loop(services, session, caller, role_model, system,
+                            seed, spec, title, dialogue, console)
+
+
+def _intake_loop(services, session, caller, role_model, system, seed, spec,
+                 title, dialogue, console) -> IntakeResult | None:
+    config = services.config
     for round_no in range(1, config.run.intake_rounds + 1):
         forced_final = round_no == config.run.intake_rounds
         sections = _sections(seed, spec, dialogue)
@@ -85,6 +95,7 @@ def run_intake(services, seed: str | None = None,
             {"role": "system", "content": system},
             {"role": "user", "content": "\n\n".join(s.header() + s.text for s in sections)},
         ]
+        session.update(f"the model is drafting (round {round_no}/{config.run.intake_rounds})")
         try:
             turn = call_with_progress(
                 services,
@@ -94,6 +105,7 @@ def run_intake(services, seed: str | None = None,
         except Exception as exc:
             log.error(f"intake model call failed: {exc}")
             return None
+        session.update("waiting for your answer at the prompt")
         if turn.spec_markdown.strip():
             spec = turn.spec_markdown.strip()
             title = turn.title.strip() or title

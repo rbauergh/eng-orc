@@ -191,7 +191,7 @@ def request(
             f"(This is a change request for the EXISTING project '{proj.meta.title}'. "
             f"Existing design follows — spec only the change.)\n\n{design}",
         ) if p)
-        result = run_intake(svc, seed=seed)
+        result = run_intake(svc, seed=seed, detail=f"orc request {project} -i")
         if result is None:
             log.info("request abandoned — nothing queued")
             raise typer.Exit(0)

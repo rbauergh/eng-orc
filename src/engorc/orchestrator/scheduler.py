@@ -16,6 +16,7 @@ from ..events import Kind
 from ..fsio import FileLock
 from ..obs.console import log
 from ..project import Project
+from ..sessions import foreign_sessions
 from ..util import iso_now
 from .graph import run_step
 from .services import Services
@@ -46,6 +47,14 @@ class Scheduler:
     # -- stepping ---------------------------------------------------------------
     def step(self, slug: str | None = None) -> tuple[str, str] | None:
         """Run one phase unit; returns (slug, note) or None when nothing is runnable."""
+        # An interactive conversation in another terminal owns the GPU for
+        # now: stepping would swap its model out between turns.
+        sessions = foreign_sessions(self.config.home)
+        if sessions:
+            active = sessions[0]
+            log.debug(f"yielding the GPU to interactive {active.get('kind', 'session')} "
+                      f"({active.get('detail', '')})")
+            return None
         if slug is not None:
             project = self.services.registry.get(slug)
             if not project.is_runnable():
@@ -150,6 +159,12 @@ class Scheduler:
         return steps
 
     def _explain_idle(self) -> None:
+        sessions = foreign_sessions(self.config.home)
+        if sessions:
+            active = sessions[0]
+            log.info(f"yielding to interactive {active.get('kind', 'session')} "
+                     f"({active.get('detail', '')}) — runs resume when it finishes")
+            return
         gates = 0
         blocked: list[str] = []
         parked: list[tuple[str, str]] = []

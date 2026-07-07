@@ -29,6 +29,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ..events import Event, Kind
+from ..sessions import active_sessions
 from ..util import human_age, human_duration, shorten, utc_now
 
 
@@ -95,6 +96,7 @@ class Snapshot:
     now: list[NowLine] = field(default_factory=list)
     activity: list[str] = field(default_factory=list)
     open_gates: int = 0
+    sessions: list[dict] = field(default_factory=list)  # live interactive intakes
 
 
 def _gpu_line() -> str:
@@ -150,6 +152,7 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
         snapshot.memory_backend = services.memory.health()[1]
     except Exception:
         snapshot.memory_backend = "unknown"
+    snapshot.sessions = active_sessions(config.home)
 
     # -- gpu: residency, swap history, and live token flow ------------------
     services.observe_gpu()
@@ -204,6 +207,10 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
             tokens_out += int(event.payload.get("completion_tokens", 0) or 0)
 
     snapshot.gpu_io = f"completed calls last 5m: {tokens_in:,} tok in / {tokens_out:,} tok out"
+    # Interactive intake calls belong to no project journal: without this
+    # note, "generating" next to zero project I/O reads as a stall.
+    if snapshot.sessions and snapshot.gpu_live != "idle":
+        snapshot.gpu_io += " · serving the interactive session"
     # A single long call journals nothing until it finishes — say so instead
     # of letting "busy" and "0 tokens" sit next to each other unexplained.
     if merged and snapshot.gpu_live != "idle":
@@ -300,11 +307,29 @@ def _idle_reason(s: Snapshot) -> str:
     return "[dim]idle — active projects but no attempt in flight (is `orc run --watch` running?)[/dim]"
 
 
+def _session_line(record: dict) -> str:
+    parts = [record.get("kind", "session"), f"({record.get('detail', '')})"]
+    status = record.get("status", "")
+    if status:
+        parts.append(f"— {status}")
+    started = record.get("started", "")
+    if started:
+        parts.append(f"· started {human_age(started)} ago")
+    return " ".join(parts)
+
+
 def _now_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
-    text = "\n".join(
-        f"[bold]{escape(line.slug)}[/bold] · {escape(line.text)}" for line in s.now
-    ) or _idle_reason(s)
-    key = tuple((line.slug, line.text) for line in s.now) or (text,)
+    lines = [
+        f"[bold magenta]interactive[/bold magenta] · {escape(_session_line(record))} "
+        "· scheduled runs are yielding"
+        for record in s.sessions
+    ]
+    lines += [f"[bold]{escape(line.slug)}[/bold] · {escape(line.text)}" for line in s.now]
+    text = "\n".join(lines) or _idle_reason(s)
+    key = (
+        tuple((r.get("kind"), r.get("detail"), r.get("status")) for r in s.sessions),
+        tuple((line.slug, line.text) for line in s.now),
+    ) if lines else (text,)
     return key, Panel(_nowrap(text), title="working now", title_align="left")
 
 

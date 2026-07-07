@@ -1,0 +1,478 @@
+version: 1
+goal_recap: Deliver a responsive Connect 4 Windows app with Pygame, Minimax AI, and standalone distribution.
+items:
+- id: wi_1kwz2tjre4kqxdhwd
+  title: Scaffold & Configuration
+  kind: chore
+  description: Scaffold project structure, configuration constants, and High-DPI OpenGL setup.
+  acceptance:
+  - 'Directory structure: connect4/, game/, ai/, ui/, config/, assets/ (with __init__.py where applicable).'
+  - 'config/settings.py defines: WINDOW_SIZE=(700,600), BOARD_COLORS={''p1'':''#FF0000'',''p2'':''#0000FF'',''bg'':''#000000'',''grid'':''#FFFFFF''},
+    DIFFICULTY_DEPTHS={''easy'':3,''medium'':5,''hard'':7}, ASSET_PATHS={''drop'':''assets/drop.wav'',''win'':''assets/win.wav'',''click'':''assets/click.wav''}.'
+  - 'config/settings.py or ui/__init__.py contains: pygame.display.gl_set_attribute(pygame.GL_CONTEXT_PROFILE_MASK,
+    pygame.GL_CONTEXT_PROFILE_CORE), pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION,
+    3), pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 3).'
+  - test_settings.py asserts these constants exist and are valid.
+  verify_commands:
+  - python -c "import sys; sys.path.insert(0,'.'); from config.settings import WINDOW_SIZE, BOARD_COLORS,
+    DIFFICULTY_DEPTHS, ASSET_PATHS; assert WINDOW_SIZE == (700, 600); assert 'p1' in BOARD_COLORS; assert
+    'easy' in DIFFICULTY_DEPTHS; assert 'assets/drop.wav' in ASSET_PATHS.values()"
+  - grep -r 'gl_set_attribute' connect4/ ui/ config/
+  depends_on: []
+  files_hint:
+  - connect4/__init__.py
+  - config/settings.py
+  - test_settings.py
+  status: todo
+  priority: 3
+  size: S
+  attempts:
+  - id: att_1kwz6p9xr08syp5b2
+    role: implementer
+    model: coder
+    started: '2026-07-07T21:10:37+00:00'
+    ended: '2026-07-07T21:18:04+00:00'
+    outcome: fail
+    summary: review panel requested changes (1 blocking finding(s) across 4 reviewer(s))
+    test_summary: '[PASS] python -c "import sys; sys.path.insert(0,''.''); from config.settings import
+      WINDOW_SIZE, BOARD_COLORS, DIFFICULTY_DEPTHS, ASSET_PATHS; assert WINDOW_SIZE == (700, 600); assert
+      ''p1'' in BOARD_COLORS; assert ''easy'' in DIFFICULTY_DEPTHS; assert ''assets/drop.wav'' in ASSET_PATHS.values()"
+
+      [PASS] grep -r ''gl_set_attribute'' connect4/ ui/ config/'
+    transcript: artifacts/attempts/wi_1kwz2tjre4kqxdhwd/implementer-2026-07-07T211804+0000.md
+    tokens_in: 182120
+    tokens_out: 3779
+  - id: att_1kwz7y6gbayzzqnmd
+    role: implementer
+    model: coder
+    started: '2026-07-07T21:32:24+00:00'
+    ended: '2026-07-07T21:34:44+00:00'
+    outcome: fail
+    summary: review panel requested changes (1 blocking finding(s) across 4 reviewer(s))
+    test_summary: '[PASS] python -c "import sys; sys.path.insert(0,''.''); from config.settings import
+      WINDOW_SIZE, BOARD_COLORS, DIFFICULTY_DEPTHS, ASSET_PATHS; assert WINDOW_SIZE == (700, 600); assert
+      ''p1'' in BOARD_COLORS; assert ''easy'' in DIFFICULTY_DEPTHS; assert ''assets/drop.wav'' in ASSET_PATHS.values()"
+
+      [PASS] grep -r ''gl_set_attribute'' connect4/ ui/ config/'
+    transcript: artifacts/attempts/wi_1kwz2tjre4kqxdhwd/implementer-2026-07-07T213444+0000.md
+    tokens_in: 36000
+    tokens_out: 969
+  - id: att_1kwz8wcne3vzap66k
+    role: implementer
+    model: coder-fast
+    started: '2026-07-07T21:48:54+00:00'
+    ended: '2026-07-07T21:49:30+00:00'
+    outcome: stuck
+    summary: three malformed replies in a row
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz2tjre4kqxdhwd/implementer-2026-07-07T214930+0000.md
+    tokens_in: 13986
+    tokens_out: 243
+  notes:
+  - 'review[adversarial] SPEC_GAP/major: Project missing required ''assets/'' directory referenced in
+    config.settings → Add an ''assets/'' directory to the repository containing the required asset files
+    or adjust ASSET_PATHS accordingly.'
+  - 'review[adversarial] SPEC_GAP/major: High‑DPI setup mentioned in acceptance criteria is not implemented
+    in the code base → Implement high‑DPI configuration in the UI module (e.g., setting DPI awareness
+    for Windows or using appropriate scaling settings).'
+  - 'triage#1: The item failed review for missing assets/ directory and High-DPI setup code. The description
+    was too vague regarding implementation details.'
+  - 'triage guidance: You must: 1. Create the `assets/` directory. 2. Implement High-DPI in `config/settings.py`
+    by adding: `pygame.display.gl_set_attribute(pygame.GL_CONTEXT_PROFILE_MASK, pygame.GL_CONTEXT_PROFILE_CORE)`,
+    `pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 3)`, `pygame.display.gl_set_attr…'
+  - 'triage#2: Acceptance criteria were vague about directory structure, constant definitions, and High-DPI
+    OpenGL setup. This caused the model to stall and fail review for missing assets and configuration.'
+  - 'triage guidance: Create the exact directory structure: connect4/, game/, ai/, ui/, config/, assets/.
+    In config/settings.py, define WINDOW_SIZE, BOARD_COLORS, DIFFICULTY_DEPTHS, ASSET_PATHS. Crucially,
+    add the High-DPI OpenGL setup block: pygame.display.gl_set_attribute(...) for Core Profile 3.3. Create
+    empty __init…'
+  - an attempt was interrupted mid-run (orc stopped); partial changes may remain in the workroom — check
+    before redoing work
+  - 'review[adversarial] BUG/blocker: main.py imports connect4.main.run but no such module exists, causing
+    ImportError at runtime. → Either create connect4/main.py with a run() function or change main.py to
+    import a valid module.'
+  - 'review[adversarial] BUG/blocker: main.py imports from connect4.main import run, but connect4/main.py
+    does not exist, causing ImportError when executing main.py. This breaks the application entry point.
+    → Remove the incorrect import and call or create a connect4/main.py module with a run() function.
+    For scaffolding, comment out or replace with a placeholder until game logic is implemented.'
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T21:49:30+00:00'
+- id: wi_1kwz2tjrgndrpw28y
+  title: Core Board Logic
+  kind: test
+  description: Implement `game/board.py` with 1D array state, `drop_piece`, gravity simulation, win/draw
+    detection, and animation row calculation.
+  acceptance:
+  - '`Board` class manages 7x6 grid as 1D list.'
+  - '`drop_piece(col, player)` places piece and returns row.'
+  - '`check_win()` detects 4-in-a-row (H/V/D).'
+  - '`is_draw()` detects full board.'
+  - '`get_animation_row(col)` returns target row for falling animation.'
+  - '`test_board.py` covers full column, win in all directions, draw, and empty board.'
+  verify_commands:
+  - pytest -q test_board.py
+  depends_on:
+  - wi_1kwz2tjre4kqxdhwd
+  files_hint:
+  - game/board.py
+  - test_board.py
+  status: todo
+  priority: 3
+  size: M
+  attempts: []
+  notes:
+  - test_first
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T20:03:03+00:00'
+- id: wi_1kwz2tjrgsnqz8vhk
+  title: AI Engine
+  kind: test
+  description: Implement `ai/minimax.py` with iterative deepening, alpha-beta pruning, and difficulty-based
+    depth/heuristic weights.
+  acceptance:
+  - '`compute_move(board, difficulty)` returns valid column index.'
+  - Easy depth=3, Medium=5, Hard=7.
+  - Move computed within 1s on Hard difficulty for standard positions.
+  - '`test_minimax.py` verifies depth limits, alpha-beta cutoff behavior, and heuristic evaluation.'
+  verify_commands:
+  - pytest -q test_minimax.py
+  depends_on:
+  - wi_1kwz2tjrgndrpw28y
+  files_hint:
+  - ai/minimax.py
+  - test_minimax.py
+  status: todo
+  priority: 3
+  size: M
+  attempts: []
+  notes:
+  - test_first
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T20:03:03+00:00'
+- id: wi_1kwz2tjrgfgak8gvz
+  title: Input & Audio
+  kind: test
+  description: Implement `ui/input.py` for mouse mapping (hover, clicks) and `ui/audio.py` for sound playback.
+  acceptance:
+  - '`InputManager.get_hover_col(x, y)` maps screen coords to board column.'
+  - '`InputManager.poll()` returns `(action, payload)` tuples for clicks/hover.'
+  - '`Audio.play(name)` plays sound without blocking.'
+  - '`test_input.py` verifies coordinate-to-column mapping and action parsing.'
+  verify_commands:
+  - pytest -q test_input.py
+  depends_on:
+  - wi_1kwz2tjre4kqxdhwd
+  files_hint:
+  - ui/input.py
+  - ui/audio.py
+  - test_input.py
+  status: todo
+  priority: 3
+  size: S
+  attempts: []
+  notes:
+  - test_first
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T20:03:03+00:00'
+- id: wi_1kwz2tjrggpqkbn34
+  title: Renderer
+  kind: test
+  description: Implement `ui/renderer.py` to draw menu, board, pieces, hover highlight, animations, and
+    win lines using Pygame.
+  acceptance:
+  - Draws 7x6 grid with correct colors.
+  - Renders pieces with drop animation support.
+  - Highlights hovered column.
+  - Draws win line overlay.
+  - '`test_renderer.py` tests `calculate_cell_rect` helper for coordinate accuracy.'
+  verify_commands:
+  - pytest -q test_renderer.py
+  depends_on:
+  - wi_1kwz2tjre4kqxdhwd
+  - wi_1kwz2tjrgndrpw28y
+  - wi_1kwz2tjrgfgak8gvz
+  files_hint:
+  - ui/renderer.py
+  - test_renderer.py
+  status: todo
+  priority: 3
+  size: M
+  attempts: []
+  notes:
+  - test_first
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T20:03:03+00:00'
+- id: wi_1kwz2tjrg9d83szp4
+  title: Main Loop & Integration
+  kind: test
+  description: Implement `main.py` with state machine (Menu/Play/GameOver), event dispatch, and integration
+    of all layers.
+  acceptance:
+  - Window launches with Menu state.
+  - Difficulty selection transitions to Gameplay.
+  - Human turn processes clicks; AI turn triggers `compute_move`.
+  - Win/Draw transitions to Game Over.
+  - Game Over allows restart.
+  - '`test_main.py` verifies state transition logic.'
+  verify_commands:
+  - pytest -q test_main.py
+  depends_on:
+  - wi_1kwz2tjrgndrpw28y
+  - wi_1kwz2tjrgsnqz8vhk
+  - wi_1kwz2tjrggpqkbn34
+  files_hint:
+  - main.py
+  - test_main.py
+  status: todo
+  priority: 3
+  size: M
+  attempts: []
+  notes:
+  - test_first
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T20:03:03+00:00'
+- id: wi_1kwz2tjrga9x967z7
+  title: Build & Polish
+  kind: chore
+  description: Add sound assets, create PyInstaller spec, and bundle standalone executable.
+  acceptance:
+  - Sound files (`drop.wav`, `win.wav`, `click.wav`) present in `assets/`.
+  - PyInstaller spec includes all packages and assets.
+  - '`dist/connect4.exe` generated and runs on Windows.'
+  - Memory footprint < 150MB.
+  - High-DPI rendering is crisp.
+  verify_commands:
+  - pyinstaller --version
+  depends_on: []
+  files_hint:
+  - connect4.spec
+  - assets/
+  status: dropped
+  priority: 3
+  size: S
+  attempts:
+  - id: att_1kwz3ya3k8q99vm6g
+    role: implementer
+    model: coder
+    started: '2026-07-07T20:22:34+00:00'
+    ended: '2026-07-07T20:22:34+00:00'
+    outcome: error
+    summary: interrupted (process died mid-attempt)
+    test_summary: ''
+    tokens_in: 0
+    tokens_out: 0
+  - id: att_1kwz4633bcd23yd6v
+    role: implementer
+    model: coder
+    started: '2026-07-07T20:26:49+00:00'
+    ended: '2026-07-07T20:34:36+00:00'
+    outcome: stuck
+    summary: 'repeated the same action three times: run'
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz2tjrga9x967z7/implementer-2026-07-07T203436+0000.md
+    tokens_in: 165911
+    tokens_out: 3526
+  - id: att_1kwz4mdpczkj8sgcg
+    role: implementer
+    model: coder-fast
+    started: '2026-07-07T20:34:38+00:00'
+    ended: '2026-07-07T20:35:14+00:00'
+    outcome: stuck
+    summary: three malformed replies in a row
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz2tjrga9x967z7/implementer-2026-07-07T203514+0000.md
+    tokens_in: 8228
+    tokens_out: 234
+  notes:
+  - 'triage#1: The item combines asset generation, spec creation, building, and verification. This complexity
+    causes the model to get stuck or time out.'
+  created: '2026-07-07T20:03:03+00:00'
+  updated: '2026-07-07T20:41:22+00:00'
+- id: wi_1kwz50qek754xea9m
+  title: Generate Build Configuration and Assets
+  kind: feature
+  description: Create PyInstaller spec file and asset files.
+  acceptance:
+  - assets/ contains drop.wav, win.wav, click.wav.
+  - build.spec exists and includes datas/hiddenimports for assets and connect4 package.
+  - build.spec entry_point points to main executable.
+  verify_commands:
+  - test -f build.spec
+  - ls assets/*.wav
+  depends_on: []
+  files_hint:
+  - build.spec
+  - assets/drop.wav
+  - assets/win.wav
+  - assets/click.wav
+  status: dropped
+  priority: 3
+  size: S
+  attempts:
+  - id: att_1kwz564zw3x3wrjk1
+    role: implementer
+    model: coder
+    started: '2026-07-07T20:44:19+00:00'
+    ended: '2026-07-07T20:55:49+00:00'
+    outcome: stuck
+    summary: ran out of turns (40) without finishing
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz50qek754xea9m/implementer-2026-07-07T205549+0000.md
+    tokens_in: 226412
+    tokens_out: 6703
+  - id: att_1kwz5v6rxh5p9szzz
+    role: implementer
+    model: coder
+    started: '2026-07-07T20:55:49+00:00'
+    ended: '2026-07-07T20:56:42+00:00'
+    outcome: stuck
+    summary: 'repeated the same action three times: finish'
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz50qek754xea9m/implementer-2026-07-07T205642+0000.md
+    tokens_in: 68260
+    tokens_out: 587
+  - id: att_1kwz5wstmn022rnc7
+    role: implementer
+    model: coder-fast
+    started: '2026-07-07T20:56:42+00:00'
+    ended: '2026-07-07T20:57:39+00:00'
+    outcome: stuck
+    summary: three malformed replies in a row
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz50qek754xea9m/implementer-2026-07-07T205739+0000.md
+    tokens_in: 30758
+    tokens_out: 944
+  notes:
+  - 'split from wi_1kwz2tjrga9x967z7: The item combines asset generation, spec creation, building, and
+    verification. This complexity causes the model to get stuck or time out.'
+  - 'triage#1: The item combined asset generation, spec creation, building, and verification. This scope
+    caused the model to time out or repeat actions.'
+  created: '2026-07-07T20:41:22+00:00'
+  updated: '2026-07-07T21:07:38+00:00'
+- id: wi_1kwz50qekcmwth4e6
+  title: Build Executable and Verify Performance
+  kind: feature
+  description: Run PyInstaller to generate the executable and verify memory usage.
+  acceptance:
+  - dist/connect4.exe is generated.
+  - dist/connect4.exe runs without error.
+  - Memory usage is below 150MB during execution.
+  - High-DPI rendering is functional.
+  verify_commands:
+  - test -f dist/connect4.exe
+  - python -c "import psutil; import os; print(psutil.Process(os.getpid()).memory_info().rss / 1024 /
+    1024)"
+  depends_on:
+  - wi_1kwz50qek754xea9m
+  files_hint:
+  - dist/connect4.exe
+  status: todo
+  priority: 3
+  size: M
+  attempts:
+  - id: att_1kwz8xgdfa0wmqyev
+    role: implementer
+    model: coder
+    started: '2026-07-07T21:49:30+00:00'
+    ended: '2026-07-07T21:54:00+00:00'
+    outcome: stuck
+    summary: 'repeated the same action three times: write_file'
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz50qekcmwth4e6/implementer-2026-07-07T215400+0000.md
+    tokens_in: 132916
+    tokens_out: 1304
+  - id: att_1kwz95qmyv4e0grk0
+    role: implementer
+    model: coder
+    started: '2026-07-07T21:54:00+00:00'
+    ended: '2026-07-07T22:07:20+00:00'
+    outcome: stuck
+    summary: ran out of turns (40) without finishing
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz50qekcmwth4e6/implementer-2026-07-07T220720+0000.md
+    tokens_in: 248516
+    tokens_out: 11535
+  - id: att_1kwz9y5817yt6hbk8
+    role: implementer
+    model: coder-fast
+    started: '2026-07-07T22:07:20+00:00'
+    ended: '2026-07-07T22:07:58+00:00'
+    outcome: stuck
+    summary: three malformed replies in a row
+    test_summary: ''
+    transcript: artifacts/attempts/wi_1kwz50qekcmwth4e6/implementer-2026-07-07T220758+0000.md
+    tokens_in: 9674
+    tokens_out: 251
+  notes:
+  - 'split from wi_1kwz2tjrga9x967z7: The item combines asset generation, spec creation, building, and
+    verification. This complexity causes the model to get stuck or time out.'
+  created: '2026-07-07T20:41:22+00:00'
+  updated: '2026-07-07T22:07:58+00:00'
+- id: wi_1kwz6gtewywa9a4hk
+  title: Create Assets Directory and Files
+  kind: feature
+  description: Create assets directory and minimal valid WAV files.
+  acceptance:
+  - assets/ directory exists.
+  - assets/drop.wav, assets/win.wav, assets/click.wav exist and are valid WAV files.
+  verify_commands:
+  - test -d assets && ls assets/*.wav
+  depends_on: []
+  files_hint:
+  - assets/drop.wav
+  - assets/win.wav
+  - assets/click.wav
+  status: in_progress
+  priority: 3
+  size: S
+  attempts:
+  - id: att_1kwz9za44zhzw1z8s
+    role: implementer
+    model: coder
+    started: '2026-07-07T22:07:58+00:00'
+    ended: '2026-07-07T22:10:40+00:00'
+    outcome: fail
+    summary: review panel requested changes (1 blocking finding(s) across 3 reviewer(s))
+    test_summary: '[PASS] test -d assets && ls assets/*.wav'
+    transcript: artifacts/attempts/wi_1kwz6gtewywa9a4hk/implementer-2026-07-07T221040+0000.md
+    tokens_in: 90501
+    tokens_out: 1618
+  - id: att_1kwzb5jnejxn33g11
+    role: implementer
+    model: coder
+    started: '2026-07-07T22:28:52+00:00'
+    summary: ''
+    test_summary: ''
+    tokens_in: 0
+    tokens_out: 0
+  notes:
+  - 'split from wi_1kwz50qek754xea9m: The item combined asset generation, spec creation, building, and
+    verification. This scope caused the model to time out or repeat actions.'
+  - 'review[correctness] BUG/blocker: The `create_sounds.py` script generates WAV files in `connect4/assets/`
+    instead of the required `assets/` directory. → Update the file paths in `create_sounds.py` to generate
+    files directly in `assets/` (e.g., `create_wav(''assets/drop.wav'', ...)`).'
+  created: '2026-07-07T21:07:38+00:00'
+  updated: '2026-07-07T22:28:52+00:00'
+- id: wi_1kwz6gtexrw49v6bt
+  title: Create PyInstaller Build Spec
+  kind: feature
+  description: Create PyInstaller build spec file.
+  acceptance:
+  - build.spec exists.
+  - build.spec includes datas/hiddenimports for assets/connect4.
+  - build.spec entry_point points to main executable.
+  verify_commands:
+  - test -f build.spec && grep -q 'datas' build.spec
+  depends_on:
+  - wi_1kwz6gtewywa9a4hk
+  files_hint:
+  - build.spec
+  status: todo
+  priority: 3
+  size: S
+  attempts: []
+  notes:
+  - 'split from wi_1kwz50qek754xea9m: The item combined asset generation, spec creation, building, and
+    verification. This scope caused the model to time out or repeat actions.'
+  created: '2026-07-07T21:07:38+00:00'
+  updated: '2026-07-07T21:07:38+00:00'

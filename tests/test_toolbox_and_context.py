@@ -31,6 +31,47 @@ def test_path_jail_blocks_escapes(ctx):
     assert not result.ok
 
 
+def test_binary_workroom_content_never_crashes_decoding(ctx):
+    """Regression: an implementer generated NUL-free binary .wav files; git's
+    text heuristic dumped all 16MB into the diff and the strict utf-8 decode
+    killed the whole step ('invalid continuation byte')."""
+    from engorc.agents.toolbox.git import diff_since, ensure_repo, head_sha
+    from engorc.agents.toolbox.shell import run_command
+
+    workroom = ctx.workroom
+    ensure_repo(workroom)
+    # RIFF header + high bytes, no NULs: git treats it as text, utf-8 can't
+    (workroom / "drop.wav").write_bytes(b"RIFF\x24\x08WAVE" + b"\xdc\xff\xfe\xdc" * 64)
+    diff = diff_since(workroom, head_sha(workroom))
+    assert "drop.wav" in diff  # decoded with replacement, not a crash
+
+    result = run_command(ctx, r"printf '\xdc\xff\xfe'", timeout=30)
+    assert result.ok and "exit code 0" in result.output
+
+
+def test_step_errors_carry_the_crash_site(config, monkeypatch):
+    """Regression: '[system] utf-8 codec can't decode…' gave no clue WHERE —
+    step errors now journal the exception type and deepest frame."""
+    import engorc.orchestrator.scheduler as scheduler_module
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.scheduler import Scheduler
+    from engorc.orchestrator.services import Services
+    from engorc.registry import Registry
+
+    services = Services.build(config, client=FakeLLM(lambda *a: "unused"))
+    project = Registry(config).create("crashy mission", title="C")
+
+    def boom(services, project):
+        raise UnicodeDecodeError("utf-8", b"\xdc", 0, 1, "invalid continuation byte")
+
+    monkeypatch.setattr(scheduler_module, "run_step", boom)
+    slug, note = Scheduler(services).step(project.root.name)
+    assert "step errored" in note
+    errors = list(project.journal.iter_events(kinds=["error"]))
+    assert errors and "UnicodeDecodeError" in errors[-1].payload["error"]
+    assert "at File" in errors[-1].payload["error"] or "(at " in errors[-1].payload["error"]
+
+
 def test_write_and_windowed_read(ctx):
     body = "\n".join(f"line {i}" for i in range(1, 301))
     assert tool("write_file").run(ctx, {"path": "big.txt"}, body).ok

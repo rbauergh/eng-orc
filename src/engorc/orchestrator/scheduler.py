@@ -80,8 +80,18 @@ class Scheduler:
         try:
             note = run_step(self.services, project)
         except Exception as exc:
+            import traceback
+
             note = f"step errored: {exc}"
-            project.journal.append(Kind.ERROR, error=str(exc)[:800])
+            # the crash SITE travels with the error — a bug report must be
+            # able to say where, not just what
+            frames = [line.strip() for line in traceback.format_exc().splitlines()
+                      if line.strip().startswith("File ")]
+            where = f" (at {frames[-1][5:]})" if frames else ""
+            project.journal.append(
+                Kind.ERROR,
+                error=f"{type(exc).__name__}: {str(exc)[:600]}{where[:250]}",
+            )
             log.error(f"[{project_slug}] {note}")
         finally:
             lock.release()

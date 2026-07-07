@@ -16,7 +16,9 @@ def _git(workroom: Path, *argv: str, timeout: float = 60) -> tuple[int, str]:
             ["git", "-C", str(workroom), *argv],
             capture_output=True,
             text=True,
-            timeout=timeout,
+            encoding="utf-8",
+            errors="replace",  # diffs can carry raw binary bytes: git's text
+            timeout=timeout,   # heuristic misses NUL-free binaries like WAV
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, f"git failed: {exc}"

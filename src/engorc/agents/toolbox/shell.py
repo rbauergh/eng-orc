@@ -50,7 +50,8 @@ def _seed_project_venv(python: Path) -> bool:
     try:
         proc = subprocess.run(
             [str(python), "-m", "pip", "install", "-q", "--upgrade", "pip", "pytest"],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=300,
         )
         return proc.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
@@ -132,6 +133,8 @@ def run_command(ctx: ToolContext, command: str, timeout: float) -> ToolResult:
             cwd=ctx.workroom,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",  # commands may emit raw binary bytes
             timeout=timeout,
             env=_subprocess_env(ctx),
         )

@@ -26,7 +26,8 @@ _READY_STATES = ("ready", "running", "loaded")
 _STOPPING_STATES = ("stopping", "stopped", "shutdown", "shuttingdown", "stop")
 
 
-def _normalize(running: list[dict]) -> dict[str, str]:
+def normalize_states(running: list[dict]) -> dict[str, str]:
+    """Collapse llama-swap's state vocabulary to ready/stopping/loading."""
     states: dict[str, str] = {}
     for entry in running:
         model = entry.get("model")
@@ -58,7 +59,7 @@ class GpuTimeline:
         """Diff current server state against the last observation; append any
         transitions. Safe under concurrent observers (dashboard + scheduler)."""
         now = iso_now()
-        states = _normalize(running)
+        states = normalize_states(running)
         with flocked(self.state_path):
             previous: dict = read_json(self.state_path, default={})
             changed = False
@@ -119,6 +120,21 @@ class GpuTimeline:
     def recent(self, n: int = 8) -> list[dict]:
         events = list(iter_jsonl(self.log_path))
         return events[-n:]
+
+    def typical_load_seconds(self, model: str, window: int = 5) -> float | None:
+        """Median of the model's recent observed load times — the basis for
+        'loading X, about 30s to go'. None until a real load has been seen
+        (sub-second 'ready' records are first-observations, not loads)."""
+        loads = [
+            event.get("load_seconds", 0.0)
+            for event in iter_jsonl(self.log_path)
+            if event.get("model") == model and event.get("event") == "ready"
+            and (event.get("load_seconds") or 0.0) > 1.0
+        ]
+        if not loads:
+            return None
+        recent = sorted(loads[-window:])
+        return recent[len(recent) // 2]
 
     @staticmethod
     def describe(event: dict) -> str:

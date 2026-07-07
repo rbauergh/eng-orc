@@ -10,6 +10,7 @@ recorded with rationale, per the same judgment rules the charterer lives by.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 
 from rich.console import Console
 from rich.markup import escape
@@ -18,6 +19,7 @@ from rich.prompt import Prompt
 from .agents import load_prompt
 from .agents.schemas import IntakeTurn
 from .events import Kind
+from .interactive import call_with_progress
 from .llm.budget import Section
 from .llm.catalog import model_for_agent
 from .llm.structured import StructuredCaller
@@ -79,11 +81,16 @@ def run_intake(services, seed: str | None = None,
                      "yourself, record the decisions, set ready=true, no question.",
                 priority=1,
             ))
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": "\n\n".join(s.header() + s.text for s in sections)},
+        ]
         try:
-            turn = caller.call(role_model, IntakeTurn, [
-                {"role": "system", "content": system},
-                {"role": "user", "content": "\n\n".join(s.header() + s.text for s in sections)},
-            ])
+            turn = call_with_progress(
+                services,
+                partial(caller.call, role_model, IntakeTurn, messages),
+                label="drafting the spec",
+            )
         except Exception as exc:
             log.error(f"intake model call failed: {exc}")
             return None

@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..fsio import append_jsonl, atomic_write_json, flocked, iter_jsonl, read_json
-from ..util import human_duration, iso_now, parse_iso
+from ..util import human_duration, iso_now, parse_iso, progress_bar
 
 _READY_STATES = ("ready", "running", "loaded")
 _STOPPING_STATES = ("stopping", "stopped", "shutdown", "shuttingdown", "stop")
@@ -135,6 +135,16 @@ class GpuTimeline:
             return None
         recent = sorted(loads[-window:])
         return recent[len(recent) // 2]
+
+    def describe_loading(self, model: str, for_seconds: float) -> str:
+        """One line for a load in progress: a progress bar against the model's
+        typical load time when history exists, honest elapsed time otherwise."""
+        typical = self.typical_load_seconds(model)
+        if typical:
+            fraction = min(for_seconds / typical, 0.99)
+            return (f"loading {model} {progress_bar(fraction)} {fraction:.0%} "
+                    f"({for_seconds:.0f}s of ~{typical:.0f}s typical)")
+        return f"loading {model} … {for_seconds:.0f}s (first load — learning its timing)"
 
     @staticmethod
     def describe(event: dict) -> str:

@@ -40,19 +40,27 @@ def next_phase(project: Project) -> str:
     return "build"
 
 
+INTERRUPTED_NOTE = ("an attempt was interrupted mid-run (orc stopped); partial "
+                    "changes may remain in the workroom — check before redoing work")
+
+
 def cleanup_dangling_attempts(plan: Plan) -> bool:
-    """A crash mid-attempt leaves an attempt with no outcome; close it so it
-    counts against the budget and the brief shows what happened."""
+    """A stop mid-attempt (Ctrl-C, crash) leaves an attempt with no outcome.
+    That is not a model failure: the record is removed so it never consumes
+    attempt budget, and a note warns the next attempt that partial changes
+    may already sit in the workroom."""
     changed = False
     for item in plan.items:
-        for attempt in item.attempts:
-            if attempt.outcome is None and attempt.ended is None:
-                attempt.outcome = "error"
-                attempt.summary = "interrupted (process died mid-attempt)"
-                attempt.ended = attempt.started
-                changed = True
+        kept = [a for a in item.attempts if a.outcome is not None or a.ended is not None]
+        if len(kept) != len(item.attempts):
+            item.attempts = kept
+            if not item.notes or item.notes[-1] != INTERRUPTED_NOTE:
+                item.notes.append(INTERRUPTED_NOTE)
+            item.touch()
+            changed = True
         if item.status == "in_progress":
             item.status = "todo"
+            item.touch()
             changed = True
     return changed
 

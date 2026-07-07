@@ -63,7 +63,10 @@ class Services:
     def observe_gpu(self) -> None:
         """Feed the GPU timeline from the swap server; never raises."""
         try:
-            self.timeline.observe(self.swap.running_models())
+            running = self.swap.running_models()
+            if running is None:  # unreachable ≠ empty: don't fabricate unloads
+                return
+            self.timeline.observe(running)
         except Exception as exc:
             log.debug(f"gpu timeline observation skipped: {exc}")
 

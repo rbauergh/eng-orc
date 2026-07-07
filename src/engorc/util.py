@@ -62,6 +62,12 @@ def human_duration(seconds: float) -> str:
     return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
 
 
+def progress_bar(fraction: float, width: int = 20, filled: str = "━", empty: str = "╌") -> str:
+    """Text progress bar; fraction is clamped to [0, 1]."""
+    cells = int(min(max(fraction, 0.0), 1.0) * width)
+    return filled * cells + empty * (width - cells)
+
+
 def slugify(text: str, max_len: int = 40) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     slug = re.sub(r"-{2,}", "-", slug)

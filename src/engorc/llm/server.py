@@ -34,21 +34,23 @@ class SwapServer:
                 continue
         return False
 
-    def running_models(self) -> list[dict]:
-        """llama-swap /running returns the loaded model processes and states."""
+    def running_models(self) -> list[dict] | None:
+        """llama-swap /running returns the loaded model processes and states.
+        None means the server was unreachable — recorders must NOT read that
+        as "nothing is loaded" (it would fabricate unload/abort events)."""
         try:
             resp = self._http.get("/running")
             if resp.status_code != 200:
-                return []
+                return None
             data = resp.json()
         except (httpx.HTTPError, ValueError):
-            return []
+            return None
         if isinstance(data, dict):
             return data.get("running", []) or []
         return data if isinstance(data, list) else []
 
     def loaded_model(self) -> str | None:
-        for entry in self.running_models():
+        for entry in self.running_models() or []:
             model = entry.get("model")
             state = (entry.get("state") or "").lower()
             if model and state in ("ready", "running", "loaded", ""):
@@ -79,7 +81,7 @@ class SwapServer:
                                 names.update(a for a in aliases if isinstance(a, str))
         except (httpx.HTTPError, ValueError):
             pass
-        for entry in self.running_models():
+        for entry in self.running_models() or []:
             model = entry.get("model")
             if isinstance(model, str):
                 names.add(model)

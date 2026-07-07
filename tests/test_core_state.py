@@ -103,6 +103,9 @@ def test_plan_dag_validation_and_readiness(tmp_path):
 
 
 def test_dangling_attempt_cleanup():
+    """A user's Ctrl-C is not a model failure: the interrupted attempt record
+    is removed entirely (no budget consumed, displays stay at 1/3), leaving
+    only a workroom-state note behind."""
     from engorc.orchestrator.supervisor import cleanup_dangling_attempts, pick_item
 
     plan = _mini_plan()
@@ -111,14 +114,21 @@ def test_dangling_attempt_cleanup():
     item.attempts.append(AttemptRecord(role="implementer"))
     assert cleanup_dangling_attempts(plan)
     assert item.status == "todo"
-    assert item.attempts[0].outcome == "error"
+    assert item.attempts == []
+    assert any("interrupted mid-run" in note for note in item.notes)
     assert pick_item(plan, max_attempts=3).id == item.id
+    # a second interruption does not stack duplicate notes
+    item.attempts.append(AttemptRecord(role="implementer"))
+    assert cleanup_dangling_attempts(plan)
+    assert sum("interrupted mid-run" in n for n in item.notes) == 1
+
     item.attempts.extend([
         AttemptRecord(role="implementer", outcome="fail", ended=iso_now()),
         AttemptRecord(role="implementer", outcome="stuck", ended=iso_now()),
+        AttemptRecord(role="implementer", outcome="error", ended=iso_now()),
     ])
-    # three failed attempts exhaust the budget, and the dependent item is not
-    # ready while its dependency is unfinished — nothing is runnable
+    # three REAL failed attempts exhaust the budget, and the dependent item is
+    # not ready while its dependency is unfinished — nothing is runnable
     assert pick_item(plan, max_attempts=3) is None
 
 

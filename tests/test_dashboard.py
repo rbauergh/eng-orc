@@ -75,7 +75,57 @@ def test_dashboard_once_mode_prints_and_exits(config):
     run_dashboard(services, once=True, console=console)
     out = console.export_text()
     assert "eng-orc" in out and "projects" in out
-    assert "gpu timeline" in out
+    assert "gpu" in out
+
+
+def _snapshot(**overrides):
+    from engorc.obs.dashboard import Snapshot
+
+    base = dict(profile="p", home="h", projects_dir="d", server_ok=True, server_url="u",
+                gpu_live="idle", gpu_io="completed calls last 5m: 0 tok in / 0 tok out")
+    base.update(overrides)
+    return Snapshot(**base)
+
+
+def test_gpu_panel_draws_gauges_procs_and_load_bars():
+    from engorc.obs.dashboard import _gpu_panel, _gpu_size
+
+    snapshot = _snapshot(
+        gpu_stats={"util": 42, "used_gib": 9.2, "total_gib": 12.0},
+        gpu_procs=[("llama-server", 8.9), ("Xwayland", 0.3)],
+        gpu_spark="▂▄█",
+        gpu_loading=["loading nemotron ━━━━━━━━━╌╌╌╌╌╌╌╌╌╌╌ 48% (21s of ~44s typical)"],
+        gpu_events=["10:41:03 qwen loaded in 25s"],
+    )
+    _, panel = _gpu_panel(snapshot)
+    text = panel.renderable.plain
+    assert "GPU  ▕████████░░░░░░░░░░░░▏  42%" in text and "▂▄█" in text
+    assert "VRAM ▕███████████████░░░░░▏ 9.2/12.0 GiB" in text
+    assert "llama-server 8.9 GiB" in text and "+1 more, 0.3 GiB" in text
+    assert "loading nemotron" in text and "48%" in text
+    # region height: borders 2 + gauges 2 + now 1 + 1 load bar + 1 event
+    assert _gpu_size(snapshot) == 7
+    # a GPU-less box (tests, CI) skips the gauges and shrinks accordingly
+    assert _gpu_size(_snapshot(gpu_events=["e"])) == 4
+
+
+def test_snapshot_builds_load_progress_from_the_timeline(config):
+    services = Services.build(config, client=FakeLLM(lambda *a: "unused"))
+    # seed history so the load in progress gets a percent bar, then a live load
+    for _ in range(2):
+        services.timeline.observe([{"model": "qwen", "state": "starting"}])
+        services.timeline.observe([{"model": "qwen", "state": "ready"}])
+        services.timeline.observe([])
+    import json
+
+    (config.home / "gpu-timeline.jsonl").write_text(json.dumps(
+        {"ts": "2026-07-07T10:00:00+00:00", "model": "qwen",
+         "event": "ready", "load_seconds": 30.0}) + "\n")
+    services.timeline.observe([{"model": "qwen", "state": "starting"}])
+
+    snapshot = gather_snapshot(services)
+    assert snapshot.gpu_loading and "loading qwen" in snapshot.gpu_loading[0]
+    assert "of ~30s typical" in snapshot.gpu_loading[0]
 
 
 def test_live_layout_shows_project_rows_at_fixed_height(config):

@@ -112,27 +112,19 @@ def call_with_progress(services, work: Callable[[], T], label: str = "thinking")
     return outcome[0]
 
 
-_BAR_WIDTH = 20
-
-
 def _gpu_wait_line(services, label: str, elapsed: float) -> str:
     """One status line from live server state; degrades to plain elapsed time."""
     try:
         running = services.swap.running_models()
+        if running is None:  # server unreachable — nothing to narrate
+            return f"{label} … {elapsed:.0f}s"
         services.timeline.observe(running)  # every wait doubles as an observer
         states = normalize_states(running)
         loading = sorted(name for name, state in states.items() if state == "loading")
         if loading:
             name = loading[0]
-            loading_for = _loading_for(services.timeline, name, elapsed)
-            typical = services.timeline.typical_load_seconds(name)
-            if typical:
-                fraction = min(loading_for / typical, 0.99)
-                filled = int(fraction * _BAR_WIDTH)
-                bar = "━" * filled + "╌" * (_BAR_WIDTH - filled)
-                return (f"loading {name} {bar} {fraction:.0%} "
-                        f"({loading_for:.0f}s of ~{typical:.0f}s typical)")
-            return f"loading {name} … {loading_for:.0f}s (first load — learning its timing)"
+            return services.timeline.describe_loading(
+                name, _loading_for(services.timeline, name, elapsed))
         resident = sorted(name for name, state in states.items() if state == "ready")
         if resident:
             name = resident[0]

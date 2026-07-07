@@ -17,8 +17,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import timedelta
+from pathlib import Path
 
 from rich.console import Console, Group, RenderableType
 from rich.layout import Layout
@@ -30,7 +32,7 @@ from rich.text import Text
 
 from ..events import Event, Kind
 from ..sessions import active_sessions
-from ..util import human_age, human_duration, shorten, utc_now
+from ..util import human_age, human_duration, progress_bar, shorten, utc_now
 
 
 def _nowrap(markup: str) -> Text:
@@ -133,6 +135,10 @@ class Snapshot:
     gpu_events: list[str] = field(default_factory=list)  # described timeline entries
     gpu_live: str = ""  # "generating (~N tok)" | "idle"
     gpu_io: str = ""  # token I/O over the last 5 minutes
+    gpu_stats: dict | None = None  # util %, VRAM used/total GiB
+    gpu_procs: list[tuple[str, float]] = field(default_factory=list)  # (name, GiB)
+    gpu_spark: str = ""  # utilization sparkline across recent refreshes
+    gpu_loading: list[str] = field(default_factory=list)  # load progress bars
     projects: list[tuple[str, ...]] = field(default_factory=list)
     now: list[NowLine] = field(default_factory=list)
     activity: list[str] = field(default_factory=list)
@@ -140,9 +146,9 @@ class Snapshot:
     sessions: list[dict] = field(default_factory=list)  # live interactive intakes
 
 
-def _gpu_line() -> str:
+def _gpu_stats() -> dict | None:
     if shutil.which("nvidia-smi") is None:
-        return ""
+        return None
     try:
         proc = subprocess.run(
             ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
@@ -151,12 +157,45 @@ def _gpu_line() -> str:
         )
         parts = [p.strip() for p in proc.stdout.split(",")]
         if len(parts) >= 3:
-            used_gib = float(parts[1]) / 1024
-            total_gib = float(parts[2]) / 1024
-            return f"GPU {parts[0]}% · VRAM {used_gib:.1f}/{total_gib:.1f} GiB"
+            return {
+                "util": int(float(parts[0])),
+                "used_gib": float(parts[1]) / 1024,
+                "total_gib": float(parts[2]) / 1024,
+            }
     except Exception:
         pass
-    return ""
+    return None
+
+
+def _gpu_processes() -> list[tuple[str, float]]:
+    """VRAM consumers, largest first, as (process name, GiB)."""
+    if shutil.which("nvidia-smi") is None:
+        return []
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=process_name,used_memory",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        rows: list[tuple[str, float]] = []
+        for line in proc.stdout.splitlines():
+            name, _, mem = line.rpartition(",")
+            name, mem = name.strip(), mem.strip()
+            if not name or not mem:
+                continue
+            rows.append((Path(name).name, float(mem) / 1024))
+        rows.sort(key=lambda row: -row[1])
+        return rows
+    except Exception:
+        return []
+
+
+_SPARK_CHARS = "▁▂▃▄▅▆▇█"
+_UTIL_HISTORY: deque[int] = deque(maxlen=24)
+
+
+def _sparkline(values: deque[int]) -> str:
+    return "".join(_SPARK_CHARS[min(7, v * 8 // 100)] for v in values)
 
 
 def _current_attempt_line(project, plan) -> NowLine | None:
@@ -181,14 +220,21 @@ def _current_attempt_line(project, plan) -> NowLine | None:
 
 def gather_snapshot(services, details: bool = False) -> Snapshot:
     config = services.config
+    stats = _gpu_stats()
     snapshot = Snapshot(
         profile=config.models.profile,
         home=str(config.home),
         projects_dir=str(config.projects_dir),
         server_ok=services.client.health(),
         server_url=config.server.base_url,
-        gpu=_gpu_line(),
+        gpu=(f"GPU {stats['util']}% · VRAM {stats['used_gib']:.1f}/{stats['total_gib']:.1f} GiB"
+             if stats else ""),
     )
+    snapshot.gpu_stats = stats
+    if stats:
+        _UTIL_HISTORY.append(stats["util"])
+        snapshot.gpu_spark = _sparkline(_UTIL_HISTORY)
+        snapshot.gpu_procs = _gpu_processes()
     try:
         snapshot.memory_backend = services.memory.health()[1]
     except Exception:
@@ -198,7 +244,12 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
     # -- gpu: residency, swap history, and live token flow ------------------
     services.observe_gpu()
     snapshot.gpu_current = services.timeline.current()
-    snapshot.gpu_events = [services.timeline.describe(e) for e in services.timeline.recent(4)]
+    snapshot.gpu_events = [services.timeline.describe(e) for e in services.timeline.recent(3)]
+    snapshot.gpu_loading = [
+        services.timeline.describe_loading(entry["model"], entry["for_seconds"])
+        for entry in snapshot.gpu_current
+        if entry["state"] == "loading"
+    ]
     busy_bits: list[str] = []
     for entry in snapshot.gpu_current:
         if entry["state"] != "ready":
@@ -319,12 +370,33 @@ def _header_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
 
 
 def _gpu_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
-    lines = [f"[bold]now[/bold]: {escape(s.gpu_live)} · {escape(s.gpu_io)}"]
+    lines: list[str] = []
+    if s.gpu_stats:
+        st = s.gpu_stats
+        util_gauge = progress_bar(st["util"] / 100, 20, "█", "░")
+        lines.append(f"GPU  ▕{util_gauge}▏ {st['util']:>3}%  {escape(s.gpu_spark)}")
+        vram_fraction = st["used_gib"] / st["total_gib"] if st["total_gib"] else 0.0
+        vram_gauge = progress_bar(vram_fraction, 20, "█", "░")
+        vram = f"VRAM ▕{vram_gauge}▏ {st['used_gib']:.1f}/{st['total_gib']:.1f} GiB"
+        if s.gpu_procs:
+            name, gib = s.gpu_procs[0]
+            vram += f"  {escape(shorten(name, 24))} {gib:.1f} GiB"
+            rest = s.gpu_procs[1:]
+            if rest:
+                vram += f" (+{len(rest)} more, {sum(g for _, g in rest):.1f} GiB)"
+        lines.append(vram)
+    lines.append(f"[bold]now[/bold]: {escape(s.gpu_live)} · {escape(s.gpu_io)}")
+    lines += [f"[cyan]{escape(line)}[/cyan]" for line in s.gpu_loading]
     lines += [escape(line) for line in s.gpu_events]
-    if len(lines) == 1 and not s.gpu_events:
+    if not s.gpu_events:
         lines.append("[dim](no swaps observed yet)[/dim]")
-    key = (s.gpu_live, s.gpu_io, tuple(s.gpu_events))
-    return key, Panel(_nowrap("\n".join(lines)), title="gpu timeline", title_align="left")
+    key = (
+        s.gpu_stats["util"] if s.gpu_stats else None,
+        round(s.gpu_stats["used_gib"], 1) if s.gpu_stats else None,
+        s.gpu_spark, tuple(s.gpu_procs),
+        s.gpu_live, s.gpu_io, tuple(s.gpu_loading), tuple(s.gpu_events),
+    )
+    return key, Panel(_nowrap("\n".join(lines)), title="gpu", title_align="left")
 
 
 def _projects_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
@@ -415,13 +487,19 @@ def _build_layout(snapshot: Snapshot) -> Layout:
     layout = Layout()
     layout.split_column(
         Layout(name="header", size=3),
-        Layout(name="gpu", size=7),  # now-line + up to 4 timeline entries
+        Layout(name="gpu", size=_gpu_size(snapshot)),
         Layout(name="projects", size=_projects_size(snapshot)),
         Layout(name="now", size=_now_size(snapshot)),
         Layout(name="activity"),  # takes the remaining height
         Layout(name="footer", size=3),
     )
     return layout
+
+
+def _gpu_size(s: Snapshot) -> int:
+    # borders (2) + gauges (2, GPU boxes only) + now-line + load bars + events
+    return (2 + (2 if s.gpu_stats else 0) + 1 + len(s.gpu_loading)
+            + max(len(s.gpu_events), 1))
 
 
 def _projects_size(s: Snapshot) -> int:
@@ -443,15 +521,15 @@ def run_dashboard(services, interval: float = 2.0, once: bool = False,
     snapshot = gather_snapshot(services, details=details)
     layout = _build_layout(snapshot)
     keys: dict[str, tuple] = {}
-    sizes = (_projects_size(snapshot), _now_size(snapshot))
+    sizes = (_gpu_size(snapshot), _projects_size(snapshot), _now_size(snapshot))
 
     def apply(s: Snapshot) -> bool:
         nonlocal sizes
         changed = False
-        new_sizes = (_projects_size(s), _now_size(s))
+        new_sizes = (_gpu_size(s), _projects_size(s), _now_size(s))
         if new_sizes != sizes:  # geometry changes are rare (project count moved)
             sizes = new_sizes
-            layout["projects"].size, layout["now"].size = new_sizes
+            layout["gpu"].size, layout["projects"].size, layout["now"].size = new_sizes
             keys.clear()  # force full repaint into the new geometry
             changed = True
         for name, builder in _REGIONS.items():

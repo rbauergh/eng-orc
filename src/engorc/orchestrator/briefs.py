@@ -135,6 +135,22 @@ def item_recitation(item: WorkItem) -> str:
     return "\n".join(lines)
 
 
+def plan_overview_text(plan: Plan, current: WorkItem) -> str:
+    """The whole plan with the current item marked — how a worker knows what
+    is NOT its job."""
+    lines = []
+    for item in plan.items:
+        marker = "  ← YOUR ITEM" if item.id == current.id else ""
+        lines.append(f"- [{item.status}] {shorten(item.title, 70)}{marker}")
+    lines.append("")
+    lines.append(
+        "Scope rule: work ONLY your item. Anything another item names is OUT OF "
+        "SCOPE here — do not build it early, and do not assume it exists unless "
+        "its item is done. Unsure where a piece belongs? ask_architect."
+    )
+    return "\n".join(lines)
+
+
 def _attempt_history_section(item: WorkItem) -> Section:
     if not item.attempts:
         return Section(name="Prior attempts", text="", priority=2)
@@ -171,6 +187,8 @@ def item_brief(
         answers,
         _attempt_history_section(item),
         _design_section(project, max_priority=3),
+        Section(name="The full plan (your scope boundaries)",
+                text=plan_overview_text(plan, item), priority=3, truncate="tail"),
         Section(
             name="Repository map",
             text=_repomap_text(services, project, focus=item.files_hint),

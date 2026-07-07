@@ -127,6 +127,15 @@ class ItemTriage(BaseModel):
     question: str = Field(description="ask_user: the specific decision only a human can make")
 
 
+class PlanReviewVerdict(BaseModel):
+    reasoning: str
+    findings: list[str] = Field(
+        description="blocking problems only, each 'item: problem → fix' — dependency-graph "
+        "gaps, ambiguous or overlapping items, unverifiable acceptance, missing charter work"
+    )
+    verdict: Literal["approve", "request_changes"]
+
+
 class DependencyFix(BaseModel):
     item_id: str
     depends_on: list[str] = Field(

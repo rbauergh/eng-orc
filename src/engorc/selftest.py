@@ -131,6 +131,12 @@ class DemoBrain:
             })
         if schema == "PlanDraft":
             return self._plan()
+        if schema == "PlanReviewVerdict":
+            return structured_reply({
+                "reasoning": "graph is wired, items are crisp and verifiable",
+                "findings": [],
+                "verdict": "approve",
+            })
         if schema == "ReviewVerdict":
             return structured_reply({
                 "reasoning": "diff satisfies acceptance; one cosmetic note",

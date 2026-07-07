@@ -35,6 +35,25 @@ def finish(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     )
 
 
+def ask_architect(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
+    question = payload.strip() or str(args.get("question", "")).strip()
+    if not question:
+        return ToolResult(ok=False, output="ask_architect needs the question in the fenced payload")
+    consult = ctx.extras.get("consult_architect")
+    if not callable(consult):
+        return ToolResult(ok=False, output=(
+            "the architect is not available in this context — decide like an "
+            "engineer and record the assumption in your handoff"
+        ))
+    answer = str(consult(question)).strip() or "(no answer — proceed on your best judgment)"
+    from ...events import Kind
+
+    ctx.journal.append(Kind.DECISION, actor=ctx.role, item=ctx.item_id,
+                       title="architect consult",
+                       diagnosis=f"Q: {question[:160]} → A: {answer[:240]}")
+    return ToolResult(ok=True, output=f"ARCHITECT: {answer}")
+
+
 def ask_user(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     question = payload.strip() or str(args.get("question", "")).strip()
     if not question:
@@ -63,6 +82,14 @@ CONTROL_TOOLS = [
         args_doc='{"status": "done"}',
         payload_doc="handoff note: what changed, state of work, warnings, next steps",
         handler=finish,
+    ),
+    Tool(
+        name="ask_architect",
+        summary=("Ask the project architect one clarification (scope, design intent, whether "
+                 "something is another item's job). Instant and cheap — prefer this over ask_user."),
+        args_doc="{}",
+        payload_doc="the question, specific, answerable from the design and plan",
+        handler=ask_architect,
     ),
     Tool(
         name="ask_user",

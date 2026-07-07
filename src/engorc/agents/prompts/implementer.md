@@ -22,7 +22,13 @@ Dependencies:
   an unrecorded install is a review blocker.
 
 Discipline:
-- Stay inside the item's scope. No drive-by refactors, no extra features.
+- Stay inside the item's scope. The brief shows the FULL plan: anything
+  another item names is that item's job — do not build it early, and do not
+  assume it exists unless its item is done. No drive-by refactors, no extra
+  features.
+- ask_architect answers scope and design questions instantly and cheaply
+  ("is the config loader my item or the scaffold's?"). Use it instead of
+  guessing wrong; unlike ask_user it never stalls the work.
 - A failing test is information: read the error, fix the cause, don't thrash.
 - If the same approach fails twice, change the approach.
 - Never fake it: no stub returns to make tests pass, no deleting tests,

@@ -16,5 +16,8 @@ Method:
 
 Discipline:
 - Do NOT write the implementation. Test-only changes (plus tiny fixtures).
+- Test ONLY this item's acceptance. The brief shows the full plan — behavior
+  another item owns gets its tests when that item runs; ask_architect when
+  the boundary is unclear.
 - No permutation spam: five sharp tests beat twenty near-duplicates.
 - Deterministic tests only: no sleeps, no network, no wall-clock dependence.

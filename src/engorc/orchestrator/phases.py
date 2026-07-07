@@ -18,6 +18,7 @@ from ..agents.schemas import (
     DigestExtract,
     Finding,
     PlanDraft,
+    PlanReviewVerdict,
     ReviewVerdict,
     TriageReport,
 )
@@ -29,7 +30,7 @@ from ..agents.toolbox import (
     tools_named,
 )
 from ..artifacts import Handoff
-from ..config import PanelReviewer, RoleModel
+from ..config import Config, PanelReviewer, RoleModel
 from ..context.summarizer import recent_activity, summarize
 from ..decisions import Decision
 from ..events import Kind
@@ -241,12 +242,76 @@ def _draft_to_plan(draft: PlanDraft, test_policy: str = "auto") -> Plan:
     return plan
 
 
+def _plan_review_model(config: Config) -> tuple[RoleModel, str]:
+    """A DIFFERENT model family reviews the plan when the profile has one —
+    same weights re-reading their own plan is the weakest possible check."""
+    for name in ("deep-reasoner", "third-opinion", "second-opinion"):
+        if name in config.models.extra:
+            return config.models.extra[name], name
+    return config.models.coder, "coder"
+
+
+def _plan_review_text(plan: Plan) -> str:
+    parts = []
+    for item in plan.items:
+        deps = ", ".join(item.depends_on) or "(none — scheduled immediately)"
+        lines = [f"### {item.id} — {item.title} [{item.kind}, {item.size}]",
+                 f"deps: {deps}",
+                 item.description or "(no description)"]
+        if item.acceptance:
+            lines.append("acceptance: " + "; ".join(item.acceptance))
+        if item.verify_commands:
+            lines.append("verify: " + "; ".join(item.verify_commands))
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
+
+
+def _review_plan(services: Services, project: Project, plan: Plan) -> tuple[bool, list[str], str]:
+    """Second-model plan review; never wedges (an unavailable reviewer means
+    the plan proceeds unreviewed, loudly)."""
+    import yaml as _yaml
+
+    config = services.config
+    role_model, label = _plan_review_model(config)
+    log.agent("plan-reviewer", f"reviewing the plan ({label}) …")
+    sections = [
+        Section(name="The plan under review", text=_plan_review_text(plan), priority=1),
+        Section(name="Charter",
+                text=_yaml.safe_dump(project.charter(), sort_keys=False) if project.charter() else "",
+                priority=2, truncate="tail"),
+        Section(name="Design",
+                text=project.design_path.read_text(encoding="utf-8")
+                if project.design_path.exists() else "", priority=3, truncate="middle"),
+    ]
+    try:
+        verdict = one_shot_structured(
+            services.caller(project.journal, "plan-reviewer"),
+            role_model,
+            PlanReviewVerdict,
+            load_prompt("plan_review.md"),
+            sections,
+        )
+    except Exception as exc:
+        project.journal.append(Kind.ERROR, actor="plan-reviewer",
+                               error=f"plan review unavailable: {shorten(str(exc), 240)}")
+        return True, [], f"{label} (unavailable — skipped)"
+    project.journal.append(Kind.REVIEW, actor="plan-reviewer", item="(plan)",
+                           verdict=verdict.verdict, findings=len(verdict.findings),
+                           lens="plan", model=role_model.model,
+                           blockers=verdict.findings[:6])
+    if verdict.verdict == "approve" or not verdict.findings:
+        return True, [], label
+    return False, verdict.findings, label
+
+
 def phase_plan(services: Services, project: Project) -> str:
     config = services.config
     log.agent("planner", "breaking the design into work items …")
     caller = services.caller(project.journal, "planner")
     errors: list[str] | None = None
-    for _round in range(2):
+    plan: Plan | None = None
+    findings: list[str] = []
+    for _round in range(3):
         try:
             draft = one_shot_structured(
                 caller,
@@ -262,16 +327,31 @@ def phase_plan(services: Services, project: Project) -> str:
         problems = plan.validate_graph()
         if not plan.items:
             problems.append("the plan has zero items")
-        if not problems:
+        if problems:
+            errors = problems
+            plan = None
+            continue
+        approved, findings, reviewer = _review_plan(services, project, plan)
+        if approved:
             project.save_plan(plan)
             project.journal.append(Kind.DECISION, actor="planner", title="plan created",
-                                   items=len(plan.items))
+                                   items=len(plan.items), reviewed_by=reviewer)
             project.set_phase("build")
             titles = ", ".join(shorten(i.title, 40) for i in plan.items[:5])
-            return f"planned {len(plan.items)} work item(s): {titles}"
-        errors = problems
-    project.journal.append(Kind.ERROR, actor="planner", error=f"plan invalid twice: {errors}")
-    return "planner produced an invalid plan twice; will retry next visit"
+            return (f"planned {len(plan.items)} work item(s), review approved by {reviewer}: "
+                    f"{titles}")
+        log.agent("plan-reviewer", f"requested changes ({len(findings)} finding(s)); replanning")
+        errors = [f"plan review [{reviewer}]: {f}" for f in findings]
+    if plan is not None:
+        # never wedge on review taste: build with the findings on the record
+        project.save_plan(plan)
+        project.journal.append(Kind.ERROR, actor="plan-reviewer",
+                               error="proceeding with unresolved plan-review findings: "
+                                     + "; ".join(shorten(f, 120) for f in findings[:3]))
+        project.set_phase("build")
+        return f"planned {len(plan.items)} item(s) with unresolved review notes; building anyway"
+    project.journal.append(Kind.ERROR, actor="planner", error=f"plan invalid repeatedly: {errors}")
+    return "planner produced an invalid plan repeatedly; will retry next visit"
 
 
 def plan_request(services: Services, project: Project, request_text: str) -> str:
@@ -322,6 +402,12 @@ def plan_request(services: Services, project: Project, request_text: str) -> str
     if problems:
         project.journal.append(Kind.ERROR, actor="planner", error=f"request plan invalid: {problems}")
         return f"the planner produced an invalid extension ({problems[0]}) — try again"
+    approved, findings, reviewer = _review_plan(services, project, plan)
+    if not approved:
+        # extensions proceed anyway — the concerns travel with the new items
+        for item in new_items:
+            for finding in findings[:2]:
+                item.notes.append(f"plan-review[{reviewer}]: {shorten(finding, 220)}")
     project.save_plan(plan)
 
     meta = project.meta
@@ -633,6 +719,28 @@ def _run_item_loop(
     )
 
     services.observe_gpu()
+
+    def consult_architect(question: str) -> str:
+        text, _usage = one_shot_prose(
+            services.client,
+            model_for_agent(config, "architect"),
+            ("# Architect consult\nYou are the project's architect. An engineer working ONE "
+             "work item asks a clarification. Answer decisively in at most 6 sentences, "
+             "grounded in the design and plan. If the asked-about work belongs to another "
+             "item, say which one and tell them to leave it alone."),
+            [
+                Section(name="Question", text=question, priority=1),
+                Section(name="Their work item", text=briefs.item_task_text(item), priority=2),
+                Section(name="Plan overview", text=briefs.plan_overview_text(plan, item),
+                        priority=2, truncate="tail"),
+                Section(name="Design document",
+                        text=project.design_path.read_text(encoding="utf-8")
+                        if project.design_path.exists() else "", priority=3, truncate="middle"),
+            ],
+            max_tokens=500,
+        )
+        return text
+
     ctx = ToolContext(
         project=project,
         config=config,
@@ -640,7 +748,8 @@ def _run_item_loop(
         item_id=item.id,
         role=role_name,
         index=services.context_for(project).index,
-        extras={"phase": "build", "verify_commands": item.verify_commands},
+        extras={"phase": "build", "verify_commands": item.verify_commands,
+                "consult_architect": consult_architect},
     )
     ensure_project_venv(ctx)  # the dependency sandbox: pip installs stay project-local
     sections, consumed = briefs.item_brief(services, project, plan, item, config)

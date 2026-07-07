@@ -29,7 +29,7 @@ class RoleSpec:
 
 LOOP_TOOLS_FULL = [
     "read_file", "write_file", "edit_file", "list_dir", "grep", "search",
-    "run", "run_tests", "git_status", "git_diff", "finish", "ask_user",
+    "run", "run_tests", "git_status", "git_diff", "ask_architect", "finish", "ask_user",
 ]
 LOOP_TOOLS_READONLY = ["read_file", "list_dir", "grep", "search", "git_log", "git_status", "finish"]
 

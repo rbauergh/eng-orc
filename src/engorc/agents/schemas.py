@@ -127,9 +127,25 @@ class ItemTriage(BaseModel):
     question: str = Field(description="ask_user: the specific decision only a human can make")
 
 
+class DependencyFix(BaseModel):
+    item_id: str
+    depends_on: list[str] = Field(
+        description="the item's corrected FULL dependency list (existing item ids)"
+    )
+    reason: str = Field(description="the evidence this repairs, e.g. 'build item ran "
+                        "before the code it packages existed'")
+
+
 class TriageReport(BaseModel):
     reasoning: str
     items: list[ItemTriage]
+    dependency_fixes: list[DependencyFix] = Field(
+        default_factory=list,
+        description="plan-graph repairs: items whose depends_on is wrong or missing "
+        "(an empty depends_on schedules an item IMMEDIATELY; a dependency on a "
+        "dropped item counts as satisfied). May fix ANY item in the plan, not "
+        "just the failing ones",
+    )
     systemic_notes: list[str] = Field(
         description="problems beyond any single item (a reviewer model failing to load, "
         "a broken environment) worth surfacing to the user"

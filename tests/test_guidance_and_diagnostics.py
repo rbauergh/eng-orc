@@ -176,6 +176,58 @@ def test_triage_split_rewires_dependents_to_the_tail(config):
     assert "generate assets" in ready and "release notes" not in ready
 
 
+def test_triage_repairs_the_dependency_graph(config):
+    """The DAG is state triage owns: a mis-wired build item (empty depends_on
+    = 'schedule me first') gets its dependency list fixed autonomously —
+    no hand-editing plan.yaml."""
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.phases import _run_triage, _triage_evidence
+    from engorc.orchestrator.services import Services
+
+    project = Registry(config).create("graph mission", title="G")
+    scaffold = WorkItem(title="Scaffold", status="failed")
+    for _ in range(3):
+        scaffold.attempts.append(AttemptRecord(role="implementer", outcome="fail", ended=iso_now()))
+    main_loop = WorkItem(title="Main Loop", depends_on=[scaffold.id])
+    build = WorkItem(title="Build & Polish")  # the planner's missing edge
+    plan = Plan(items=[scaffold, main_loop, build])
+    project.save_plan(plan)
+
+    evidence = _triage_evidence(project, plan, [scaffold])
+    assert "Full plan dependency graph" in evidence
+    assert "(none — startable immediately)" in evidence  # the defect is visible
+
+    payload = {
+        "reasoning": "build has no deps and ran first",
+        "items": [{
+            "item_id": scaffold.id, "action": "retry",
+            "diagnosis": "reviewer flake", "guidance": "as before",
+            "new_description": "", "new_acceptance": [], "new_verify_commands": [],
+            "split_items": [], "question": "",
+        }],
+        "dependency_fixes": [
+            {"item_id": build.id, "depends_on": [main_loop.id],
+             "reason": "packaging must wait for the code it packages"},
+            {"item_id": scaffold.id, "depends_on": [build.id],
+             "reason": "this one would create a cycle"},
+        ],
+        "systemic_notes": [],
+    }
+    services = Services.build(config, client=FakeLLM(_triage_brain(payload)))
+    note = _run_triage(services, project, plan, [scaffold])
+    assert "rewired 1 dependency" in note
+
+    refreshed = project.load_plan()
+    assert refreshed.get(build.id).depends_on == [main_loop.id]
+    assert any("triage rewired dependencies" in n for n in refreshed.get(build.id).notes)
+    # the cycle-creating fix was rejected and reverted, with an error journaled
+    assert refreshed.get(scaffold.id).depends_on == []
+    errors = [e for e in project.journal.iter_events(kinds=["error"])
+              if "rejected dependency fix" in str(e.payload)]
+    assert errors
+    assert not refreshed.validate_graph()
+
+
 def test_triage_ask_user_opens_informed_gate(config):
     from engorc.llm.fake import FakeLLM
     from engorc.orchestrator.phases import _run_triage

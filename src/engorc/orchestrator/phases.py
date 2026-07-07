@@ -39,7 +39,7 @@ from ..llm.catalog import model_for_agent
 from ..llm.structured import StructuredError
 from ..memory.schema import MemoryItem
 from ..obs.console import log
-from ..plan import AttemptRecord, Plan, WorkItem
+from ..plan import TERMINAL_STATUSES, AttemptRecord, Plan, WorkItem
 from ..project import Project
 from ..util import iso_now, shorten, truncate_middle
 from . import briefs, supervisor
@@ -384,13 +384,29 @@ def _triage_round(item: WorkItem) -> int:
     return sum(1 for note in item.notes if note.startswith("triage#"))
 
 
-def _triage_evidence(project: Project, items: list[WorkItem]) -> str:
+def _plan_graph_text(plan: Plan) -> str:
+    lines = []
+    for item in plan.items:
+        deps = ", ".join(item.depends_on) or "(none — startable immediately)"
+        lines.append(f"- {item.id} [{item.status}] {shorten(item.title, 60)} ← deps: {deps}")
+    return "\n".join(lines)
+
+
+def _triage_evidence(project: Project, plan: Plan, items: list[WorkItem]) -> str:
     parts = []
     charter = project.charter() or {}
     criteria = charter.get("success_criteria") or []
     if criteria:
         parts.append("## Charter success criteria (work these need must NOT be dropped)\n"
                      + "\n".join(f"- {c}" for c in criteria))
+    parts.append(
+        "## Full plan dependency graph\n"
+        "An item with no deps may be scheduled FIRST; a dependency on a dropped "
+        "item counts as satisfied. If failures look like work running too early "
+        "(imports of modules that don't exist yet, packaging before code), the "
+        "graph is wrong — emit dependency_fixes.\n"
+        + _plan_graph_text(plan)
+    )
     for item in items:
         lines = [f"## Item {item.id}: {item.title}", item.description or "(no description)"]
         if item.acceptance:
@@ -428,7 +444,7 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
             model_for_agent(config, "planner"),
             TriageReport,
             load_prompt("triage.md"),
-            [Section(name="Evidence", text=_triage_evidence(project, items),
+            [Section(name="Evidence", text=_triage_evidence(project, plan, items),
                      priority=1, truncate="middle")],
         )
     except Exception as exc:
@@ -502,6 +518,34 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
             acted += 1
         elif entry.action == "ask_user":
             questions.append((item, entry))
+    # plan-graph repairs: the DAG is state like any other — triage may fix it,
+    # but never into an invalid graph, and never on finished work
+    rewired = 0
+    all_items = plan.by_id()
+    for fix in report.dependency_fixes:
+        target = all_items.get(fix.item_id)
+        if target is None or target.status in TERMINAL_STATUSES:
+            continue
+        proposed = [d for d in dict.fromkeys(fix.depends_on)
+                    if d in all_items and d != target.id]
+        old_deps = list(target.depends_on)
+        if proposed == old_deps:
+            continue
+        target.depends_on = proposed
+        problems = plan.validate_graph()
+        if problems:
+            target.depends_on = old_deps
+            project.journal.append(Kind.ERROR, actor="triage",
+                                   error=f"rejected dependency fix for {fix.item_id}: {problems[0]}")
+            continue
+        target.notes.append(f"triage rewired dependencies: {shorten(fix.reason, 200)}")
+        target.touch()
+        project.journal.append(Kind.DECISION, actor="triage", item=target.id,
+                               title="triage: dependency fix",
+                               diagnosis=shorten(fix.reason, 240))
+        log.agent("triage", f"rewired deps of '{shorten(target.title, 50)}' — {shorten(fix.reason, 80)}")
+        rewired += 1
+
     for note in report.systemic_notes:
         log.warn(f"triage flags a systemic problem: {note}")
         project.journal.append(Kind.ERROR, actor="triage", error=f"systemic: {shorten(note, 300)}")
@@ -521,8 +565,11 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
         project.set_state("blocked_on_user", reason="triage needs a human decision")
         return (f"triage: {acted} item(s) adjusted autonomously, "
                 f"{len(questions)} question(s) need you (orc inbox)")
+    rewired_note = f" and rewired {rewired} dependency list(s)" if rewired else ""
     if acted:
-        return f"triage adjusted {acted} stuck item(s) with fresh direction; retrying"
+        return f"triage adjusted {acted} stuck item(s){rewired_note}; retrying"
+    if rewired:
+        return f"triage rewired {rewired} dependency list(s); the plan order is fixed"
     return ""
 
 

@@ -141,6 +141,8 @@ class Snapshot:
     gpu_loading: list[str] = field(default_factory=list)  # load progress bars
     projects: list[tuple[str, ...]] = field(default_factory=list)
     now: list[NowLine] = field(default_factory=list)
+    plan_slug: str = ""  # project whose plan is shown (the one being worked)
+    plan_rows: list[tuple[bool, str]] = field(default_factory=list)  # (is_current, line)
     activity: list[str] = field(default_factory=list)
     open_gates: int = 0
     sessions: list[dict] = field(default_factory=list)  # live interactive intakes
@@ -303,6 +305,17 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
         if phase_line is not None:
             snapshot.now.append(phase_line)
 
+    # the worked project's plan, in full: the current item in context
+    if snapshot.now:
+        try:
+            focus = services.registry.get(snapshot.now[0].slug)
+            focus_plan = focus.load_plan()
+            if focus_plan.items:
+                snapshot.plan_slug = snapshot.now[0].slug
+                snapshot.plan_rows = _plan_rows(focus_plan, config.run.max_attempts_per_item)
+        except Exception:
+            pass
+
     snapshot.gpu_io = f"completed calls last 5m: {tokens_in:,} tok in / {tokens_out:,} tok out"
     # Interactive intake calls belong to no project journal: without this
     # note, "generating" next to zero project I/O reads as a stall.
@@ -412,6 +425,101 @@ def _projects_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
     return tuple(s.projects), Panel(table, title="projects", title_align="left")
 
 
+_STATUS_GLYPH = {"done": "✔", "dropped": "⊘", "in_progress": "▶",
+                 "failed": "✖", "blocked": "◌", "review": "◔"}
+_PLAN_MAX_ROWS = 13
+_PLAN_TITLE_COL = 56
+
+
+def _plan_rows(plan, max_attempts: int) -> list[tuple[bool, str]]:
+    """The plan as a git-log-style dependency tree: every item hangs under
+    the dependency it is actually waiting for, so 'blocked' is conveyed by
+    position and a dim dot instead of prose. Ready-to-run items get ○, the
+    in-flight item ▶; extra parents beyond the drawn one show as '⇠ +N'."""
+    from ..plan import TERMINAL_STATUSES
+
+    by_id = plan.by_id()
+
+    depth_cache: dict[str, int] = {}
+
+    def depth(item_id: str, seen: tuple = ()) -> int:
+        if item_id in depth_cache:
+            return depth_cache[item_id]
+        item = by_id.get(item_id)
+        deps = [d for d in (item.depends_on if item else [])
+                if d in by_id and d not in seen]
+        value = 1 + max((depth(d, (*seen, item_id)) for d in deps), default=-1)
+        depth_cache[item_id] = value
+        return value
+
+    # each item is drawn under its DEEPEST dependency — the one that actually
+    # gates it; remaining parents become the ⇠ +N suffix
+    children: dict[str | None, list] = {}
+    for item in plan.items:
+        deps = [d for d in item.depends_on if d in by_id]
+        parent = max(deps, key=depth) if deps else None
+        children.setdefault(parent, []).append(item)
+
+    def glyph(item) -> str:
+        if item.status == "todo":
+            return "○" if plan.deps_satisfied(item) else "·"
+        return _STATUS_GLYPH.get(item.status, "·")
+
+    def meta(item) -> str:
+        bits = []
+        if item.attempts:
+            bits.append(f"{len(item.attempts)}/{max_attempts}")
+        if item.status != "todo":
+            bits.append(human_age(item.updated))
+        extra = len([d for d in item.depends_on if d in by_id]) - 1
+        if extra > 0:
+            bits.append(f"⇠ +{extra}")
+        return " · ".join(bits)
+
+    rows: list[tuple[bool, str, str]] = []  # (is_current, status, line)
+
+    def walk(parent_id: str | None, prefix: str) -> None:
+        kids = children.get(parent_id, [])
+        for idx, item in enumerate(kids):
+            last = idx == len(kids) - 1
+            connector = "" if parent_id is None else ("└─" if last else "├─")
+            head = f"{prefix}{connector}{glyph(item)} "
+            width = max(12, _PLAN_TITLE_COL - len(head))
+            line = f"{head}{shorten(item.title, width):<{width}} {meta(item)}".rstrip()
+            rows.append((item.status == "in_progress", item.status, line))
+            walk(item.id, prefix + ("" if parent_id is None else ("   " if last else "│  ")))
+
+    walk(None, "")
+
+    out = [(current, line) for current, _, line in rows]
+    if len(out) > _PLAN_MAX_ROWS:
+        finished = 0
+        for _, status, _ in rows:
+            if status in TERMINAL_STATUSES:
+                finished += 1
+            else:
+                break
+        if finished > 1:
+            out = [(False, f"✔ {finished} earlier item(s) finished")] + out[finished:]
+        if len(out) > _PLAN_MAX_ROWS:
+            hidden = len(out) - (_PLAN_MAX_ROWS - 1)
+            out = out[:_PLAN_MAX_ROWS - 1] + [(False, f"… {hidden} more item(s)")]
+    return out
+
+
+def _plan_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
+    if not s.plan_rows:
+        return ("hidden",), Panel("[dim](no plan in flight)[/dim]",
+                                  title="plan", title_align="left")
+    lines = [
+        f"[bold cyan]▸ {escape(text)}[/bold cyan]" if current else f"  {escape(text)}"
+        for current, text in s.plan_rows
+    ]
+    key = (s.plan_slug, tuple(s.plan_rows))
+    return key, Panel(_nowrap("\n".join(lines)),
+                      title=f"plan — {escape(s.plan_slug)}", title_align="left")
+
+
 def _idle_reason(s: Snapshot) -> str:
     """An idle GPU should always come with its explanation."""
     if s.open_gates:
@@ -473,6 +581,7 @@ _REGIONS = {
     "gpu": _gpu_panel,
     "projects": _projects_panel,
     "now": _now_panel,
+    "plan": _plan_panel,
     "activity": _activity_panel,
     "footer": _footer_panel,
 }
@@ -490,10 +599,16 @@ def _build_layout(snapshot: Snapshot) -> Layout:
         Layout(name="gpu", size=_gpu_size(snapshot)),
         Layout(name="projects", size=_projects_size(snapshot)),
         Layout(name="now", size=_now_size(snapshot)),
+        Layout(name="plan", size=max(_plan_size(snapshot), 3)),
         Layout(name="activity"),  # takes the remaining height
         Layout(name="footer", size=3),
     )
+    layout["plan"].visible = bool(snapshot.plan_rows)
     return layout
+
+
+def _plan_size(s: Snapshot) -> int:
+    return (min(len(s.plan_rows), _PLAN_MAX_ROWS) + 2) if s.plan_rows else 0
 
 
 def _gpu_size(s: Snapshot) -> int:
@@ -526,10 +641,12 @@ def run_dashboard(services, interval: float = 2.0, once: bool = False,
     def apply(s: Snapshot) -> bool:
         nonlocal sizes
         changed = False
-        new_sizes = (_gpu_size(s), _projects_size(s), _now_size(s))
+        new_sizes = (_gpu_size(s), _projects_size(s), _now_size(s), _plan_size(s))
         if new_sizes != sizes:  # geometry changes are rare (project count moved)
             sizes = new_sizes
-            layout["gpu"].size, layout["projects"].size, layout["now"].size = new_sizes
+            layout["gpu"].size, layout["projects"].size, layout["now"].size = new_sizes[:3]
+            layout["plan"].size = max(new_sizes[3], 3)
+            layout["plan"].visible = bool(s.plan_rows)
             keys.clear()  # force full repaint into the new geometry
             changed = True
         for name, builder in _REGIONS.items():

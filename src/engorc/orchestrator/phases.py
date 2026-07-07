@@ -487,6 +487,16 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
                 replacement.notes.append(f"split from {item.id}: {shorten(entry.diagnosis, 160)}")
                 previous = replacement
             plan.add_items(replacements)
+            # anything that waited on the parent now waits on the split's tail;
+            # a dropped parent counts as satisfied, which would otherwise let
+            # dependents run before the replacement work exists
+            if replacements:
+                replacement_ids = {r.id for r in replacements}
+                for other in plan.items:
+                    if item.id in other.depends_on and other.id not in replacement_ids:
+                        other.depends_on = [d for d in other.depends_on if d != item.id]
+                        other.depends_on.append(replacements[-1].id)
+                        other.touch()
             item.notes.append(marker)
             plan.set_status(item.id, "dropped")
             acted += 1

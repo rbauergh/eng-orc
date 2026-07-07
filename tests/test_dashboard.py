@@ -128,6 +128,49 @@ def test_snapshot_builds_load_progress_from_the_timeline(config):
     assert "of ~30s typical" in snapshot.gpu_loading[0]
 
 
+def test_plan_rows_draw_the_dependency_tree():
+    from engorc.obs.dashboard import _plan_rows
+    from engorc.plan import Plan, WorkItem
+
+    done = WorkItem(title="Scaffold", status="done")
+    current = WorkItem(title="Core Board Logic", status="in_progress", depends_on=[done.id])
+    current.attempts.append(AttemptRecord(role="implementer"))
+    renderer = WorkItem(title="Renderer", depends_on=[done.id])
+    gated = WorkItem(title="Build Executable", depends_on=[current.id, renderer.id])
+    plan = Plan(items=[done, current, renderer, gated])
+
+    rows = _plan_rows(plan, max_attempts=3)
+    lines = [line for _, line in rows]
+    assert lines[0].startswith("✔ Scaffold")
+    assert lines[1].startswith("├─▶ Core Board Logic") and "1/3" in lines[1]
+    # blocked item hangs under its gating dependency: a dim dot, no prose
+    assert lines[2].startswith("│  └─· Build Executable") and "⇠ +1" in lines[2]
+    assert lines[3].startswith("└─○ Renderer")  # ready-to-run gets the open circle
+    assert [is_current for is_current, _ in rows] == [False, True, False, False]
+    assert not any("waits on" in line for line in lines)
+
+    # long plans collapse the leading finished run and cap the tail
+    many = [WorkItem(title=f"early {i}", status="done") for i in range(10)]
+    many += [WorkItem(title=f"later {i}") for i in range(16)]
+    rows = _plan_rows(Plan(items=many), max_attempts=3)
+    assert rows[0][1] == "✔ 10 earlier item(s) finished"
+    assert len(rows) == 13
+    assert "more item(s)" in rows[-1][1]
+
+
+def test_snapshot_carries_the_worked_projects_plan(config):
+    services = Services.build(config, client=FakeLLM(lambda *a: "unused"))
+    project = Registry(config).create("plan mission", title="P")
+    item = WorkItem(title="the current thing", status="in_progress")
+    item.attempts.append(AttemptRecord(role="implementer", model="coder"))
+    project.save_plan(Plan(items=[item, WorkItem(title="the next thing",
+                                                 depends_on=[item.id])]))
+    snapshot = gather_snapshot(services)
+    assert snapshot.plan_slug == project.root.name
+    assert any("▶ the current thing" in line for _, line in snapshot.plan_rows)
+    assert any("└─· the next thing" in line for _, line in snapshot.plan_rows)
+
+
 def test_live_layout_shows_project_rows_at_fixed_height(config):
     """Regression: the projects region must be tall enough for its data rows —
     a one-project table was rendering header-only (blank rows cropped)."""

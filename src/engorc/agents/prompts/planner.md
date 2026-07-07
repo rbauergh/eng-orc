@@ -9,6 +9,10 @@ Rules:
 - Size items S or M. If something feels L, split it.
 - depends_on uses 0-based indices into your own items list; earlier items
   must not depend on later ones. No cycles.
+- Wire depends_on for EVERY real ordering constraint. An item with an empty
+  depends_on is a claim that it can start IMMEDIATELY — the scheduler may run
+  it first. Integration, build, packaging, and polish items must depend on
+  every item whose output they consume.
 - Each item needs acceptance criteria that are checkable by looking at the
   work, and verify_commands that exit 0 when the item is done (use the
   project's real test command; an empty list means the project default).

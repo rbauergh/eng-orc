@@ -166,12 +166,13 @@ class ToolLoop:
         result_handoff = ""
         result_gate: str | None = None
         summary_of_compacted = ""
+        token_budget = self.role_model.max_output_tokens
 
         for turn_no in range(1, max_turns + 1):
             messages = self._build_messages(brief, turns, task_recitation, max_turns - turn_no + 1,
                                             touched, summary_of_compacted)
             try:
-                response = self.client.chat(self.role_model, messages)
+                response = self.client.chat(self.role_model, messages, max_tokens=token_budget)
             except Exception as exc:
                 self.journal.append(Kind.ERROR, actor=self.role_name, item=self.ctx.item_id,
                                     error=f"llm call failed: {exc}")
@@ -189,7 +190,17 @@ class ToolLoop:
             except FormatError as exc:
                 consecutive_format_errors += 1
                 observation = f"FORMAT ERROR: {exc}"
-                turns.append(_Turn(assistant=response.text, observation=observation))
+                if response.finish_reason == "length":
+                    # reasoning ate the whole budget before an ACTION appeared —
+                    # a repair prompt alone cannot fix a budget problem
+                    token_budget = int(token_budget * 1.5)
+                    observation += (
+                        " Your reply hit the output token budget before an ACTION line "
+                        "appeared — think less and act sooner. The budget is now larger."
+                    )
+                # record what the model actually emitted (raw_reply includes the
+                # reasoning-channel recovery), not a blank content field
+                turns.append(_Turn(assistant=raw_reply, observation=observation))
                 self._journal_turn(turn_no, "(format-error)", False, response.usage)
                 if consecutive_format_errors >= 3:
                     return self._finalize(
@@ -230,7 +241,7 @@ class ToolLoop:
                     "\n\nNOTE: you repeated the exact same action. If it did not work "
                     "before, it will not work now — change your approach."
                 )
-            turns.append(_Turn(assistant=response.text, observation=observation))
+            turns.append(_Turn(assistant=raw_reply, observation=observation))
             self._journal_turn(turn_no, action.tool, result.ok, response.usage)
 
             if terminal in ("done", "failed"):

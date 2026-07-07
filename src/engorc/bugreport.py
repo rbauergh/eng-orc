@@ -357,13 +357,14 @@ def _project_section(project) -> list[str]:
 
     if plan.items:
         parts.append("")
-        parts.append("| item | title | status | attempts | triaged |")
-        parts.append("| --- | --- | --- | --- | --- |")
+        parts.append("| item | title | status | attempts | triaged | deps |")
+        parts.append("| --- | --- | --- | --- | --- | --- |")
         for item in plan.items:
             triaged = sum(1 for n in item.notes if n.startswith("triage#"))
+            deps = ", ".join(d[-6:] for d in item.depends_on) or "—"
             parts.append(
                 f"| {item.id[-6:]} | {shorten(item.title, 50)} | {item.status} "
-                f"| {len(item.attempts)} | {triaged} |"
+                f"| {len(item.attempts)} | {triaged} | {deps} |"
             )
 
     problem_items = [i for i in plan.items

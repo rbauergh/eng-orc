@@ -49,6 +49,32 @@ def test_binary_workroom_content_never_crashes_decoding(ctx):
     assert result.ok and "exit code 0" in result.output
 
 
+def test_tool_loop_grows_budget_when_thinking_eats_it(ctx, config):
+    """Regression: gpt-oss burned its whole output budget reasoning and
+    produced empty replies — three identical FORMAT ERRORs with the same
+    budget each time. A length-finish now grows the budget and says so."""
+    from engorc.agents.runtime import ToolLoop
+    from engorc.agents.toolbox import ALL_TOOLS
+    from engorc.config import RoleModel
+    from engorc.events import Journal
+    from engorc.llm.fake import FakeLLM
+
+    finish = 'done\n\nACTION: finish {"status": "done"}\n```payload\nall good\n```\n'
+    replies = iter([("", "", "length"), finish])
+    client = FakeLLM(lambda *a: next(replies))
+    loop = ToolLoop(
+        client=client, config=config, role_name="implementer",
+        role_model=RoleModel(model="m", max_output_tokens=1000),
+        tools=[ALL_TOOLS["finish"]], ctx=ctx,
+        journal=Journal(ctx.project.root / "journal"),
+        system_prompt="# Implementer",
+    )
+    result = loop.run("brief", "task", max_turns=5)
+    assert result.status == "done"
+    assert client.calls[0]["max_tokens"] == 1000
+    assert client.calls[1]["max_tokens"] == 1500
+
+
 def test_step_errors_carry_the_crash_site(config, monkeypatch):
     """Regression: '[system] utf-8 codec can't decode…' gave no clue WHERE —
     step errors now journal the exception type and deepest frame."""

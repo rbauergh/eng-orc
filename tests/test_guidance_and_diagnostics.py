@@ -125,6 +125,57 @@ def test_triage_revise_feeds_new_direction(config):
     assert systemic
 
 
+def test_triage_split_rewires_dependents_to_the_tail(config):
+    """Regression: a dropped parent counts as a satisfied dependency, so
+    items waiting on it ran before the split-off replacements existed — and
+    the replacements themselves jumped ahead of the rest of the plan."""
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.phases import _run_triage
+    from engorc.orchestrator.services import Services
+
+    project = Registry(config).create("split mission", title="S")
+    upstream = WorkItem(title="scaffold", status="done")
+    parent = WorkItem(title="build & polish", status="failed", depends_on=[upstream.id])
+    dependent = WorkItem(title="release notes", depends_on=[parent.id])
+    for _ in range(3):
+        parent.attempts.append(AttemptRecord(role="implementer", outcome="stuck", ended=iso_now()))
+    plan = Plan(items=[upstream, parent, dependent])
+    project.save_plan(plan)
+
+    payload = {
+        "reasoning": "too big",
+        "items": [{
+            "item_id": parent.id, "action": "split",
+            "diagnosis": "combines assets, spec, build, and verification",
+            "guidance": "", "new_description": "", "new_acceptance": [],
+            "new_verify_commands": [],
+            "split_items": [
+                {"title": "generate assets", "kind": "feature", "description": "",
+                 "acceptance": [], "verify_commands": [], "depends_on": [],
+                 "files_hint": [], "size": "S", "test_first": False},
+                {"title": "build executable", "kind": "feature", "description": "",
+                 "acceptance": [], "verify_commands": [], "depends_on": [],
+                 "files_hint": [], "size": "S", "test_first": False},
+            ],
+            "question": "",
+        }],
+        "systemic_notes": [],
+    }
+    services = Services.build(config, client=FakeLLM(_triage_brain(payload)))
+    _run_triage(services, project, plan, [parent])
+
+    refreshed = project.load_plan()
+    by_title = {i.title: i for i in refreshed.items}
+    assets, build = by_title["generate assets"], by_title["build executable"]
+    assert by_title["build & polish"].status == "dropped"
+    assert assets.depends_on == [upstream.id]          # inherits the parent's deps
+    assert set(build.depends_on) == {upstream.id, assets.id}  # chained after its sibling
+    assert by_title["release notes"].depends_on == [build.id]  # rewired to the tail
+    # the split work is gated behind the same upstream the parent waited on
+    ready = [i.title for i in refreshed.ready_items()]
+    assert "generate assets" in ready and "release notes" not in ready
+
+
 def test_triage_ask_user_opens_informed_gate(config):
     from engorc.llm.fake import FakeLLM
     from engorc.orchestrator.phases import _run_triage

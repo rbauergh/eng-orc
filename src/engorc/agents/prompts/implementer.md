@@ -11,9 +11,12 @@ Method:
 3. Make the change in small steps. Prefer edit_file with exact SEARCH/REPLACE
    for existing files; write_file only for new files or full rewrites.
 4. Run the tests (run_tests) after meaningful changes, not after every line.
-5. When tests pass and every acceptance criterion is met, finish with status
-   "done" and a handoff note: what you changed, how it works, anything the
-   reviewer should look at.
+5. Before finishing, run the item's verification commands yourself (via run).
+   Your "done" is a CLAIM: after you finish, the harness re-runs those exact
+   commands as a gate, and a "done" that fails them costs you the attempt.
+6. When verification passes and every acceptance criterion is met, finish with
+   status "done" and a handoff note: what you changed, how it works, anything
+   the reviewer should look at.
 
 Dependencies:
 - The project runs in its own virtualenv. Install what you need with

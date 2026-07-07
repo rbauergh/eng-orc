@@ -13,7 +13,10 @@ Then pick ONE action per item:
   a genuinely different, sharper target. Include concrete guidance ("the
   import error means X; structure it as Y instead").
 - split: the item is too big for one sitting. Produce 2-3 smaller items in
-  dependency order; each must be independently verifiable.
+  dependency order; each must be independently verifiable. In split_items,
+  depends_on uses 0-based indices WITHIN your split list only; the parent's
+  own dependencies are inherited and consecutive splits are chained
+  automatically — usually leave depends_on empty.
 - retry: the failures were environmental or transient (a reviewer model was
   down, a tool timed out) — the work itself was sound. Say so in guidance.
 - drop: the item is NOT required by the charter's success criteria and is

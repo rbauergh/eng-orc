@@ -26,5 +26,8 @@ Rules:
   acceptance, and the project's test command in verify_commands. Only pure
   scaffolding, docs, and chores skip the tester (test_first = false).
 - files_hint lists the files the implementer will most likely touch.
+- When a codebase report is present you are EXTENDING an existing system:
+  plan items that wrap, extend, or modify what exists — never items that
+  rebuild something the report says is already there.
 - Plan the MINIMUM number of items that delivers the charter's success
   criteria. Three good items beat eight vague ones.

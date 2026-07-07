@@ -733,6 +733,7 @@ def _run_item_loop(
                 Section(name="Their work item", text=briefs.item_task_text(item), priority=2),
                 Section(name="Plan overview", text=briefs.plan_overview_text(plan, item),
                         priority=2, truncate="tail"),
+                briefs._attempt_history_section(item),  # review feedback lives here
                 Section(name="Design document",
                         text=project.design_path.read_text(encoding="utf-8")
                         if project.design_path.exists() else "", priority=3, truncate="middle"),
@@ -878,10 +879,13 @@ def _review_one_seat(
     system = load_prompt("reviewer.md") + "\n## Your lens for this review\n" + lens_text
     if stage == "tests":
         system += (
-            "\n## Stage note\nYou are reviewing ONLY the tests, before any implementation "
-            "exists. Judge whether they encode the acceptance criteria faithfully: failing "
-            "now is expected and correct; weak assertions, permutation spam, or tests that "
-            "mirror a guessed implementation instead of the required behavior are blockers."
+            "\n## Stage note\nYou are reviewing ONLY the tests, before this item's "
+            "implementation exists. Judge them against the ACCEPTANCE CRITERIA alone: "
+            "failing now is expected and correct; weak assertions, permutation spam, or "
+            "tests that mirror a guessed implementation instead of the required behavior "
+            "are blockers. Any implementation code visible in your context belongs to "
+            "OTHER items — it is not the specification and tests must not be judged "
+            "against it."
         )
     log.agent(actor, f"reviewing {'tests for ' if stage == 'tests' else ''}"
                      f"'{shorten(item.title, 50)}' on {role_model.model} …")
@@ -1060,7 +1064,10 @@ def phase_build(services: Services, project: Project) -> str:
             lines = []
             for stuck in exhausted[:3]:
                 last = stuck.last_attempt()
-                diagnosis = next((n for n in reversed(stuck.notes) if n.startswith("triage#")), "")
+                # a triage diagnosis when one ran; the freshest note otherwise —
+                # a gate with zero engineering context is homework, not a question
+                diagnosis = next((n for n in reversed(stuck.notes) if n.startswith("triage#")),
+                                 next(iter(reversed(stuck.notes)), ""))
                 entry = f"'{stuck.title}': {shorten((last.summary if last else ''), 200)}"
                 if diagnosis:
                     entry += f"\n  {shorten(diagnosis, 600)}"
@@ -1253,11 +1260,19 @@ def phase_wrap(services: Services, project: Project) -> str:
     if pending:
         if not any(g.from_role == "supervisor" and g.phase == "wrap"
                    for g in project.gates.open_gates()):
-            titles = "; ".join(shorten(i.title, 80) for i in pending)
+            lines = []
+            for item in pending:
+                # the drop's rationale travels with the question — "revive or
+                # not" is unanswerable without the why
+                reason = next((n for n in reversed(item.notes) if n.startswith("triage#")), "")
+                entry = f"'{shorten(item.title, 70)}'"
+                if reason:
+                    entry += f" (dropped because: {shorten(reason.split(':', 1)[-1].strip(), 160)})"
+                lines.append(entry)
             project.gates.open(
                 question=(f"All runnable work is finished, but {len(pending)} item(s) were "
-                          f"dropped along the way: {titles}. Should I finish without them, "
-                          "or revive them (tell me what to change)?"),
+                          f"dropped along the way: {'; '.join(lines)}. Should I finish "
+                          "without them, or revive them (tell me what to change)?"),
                 from_role="supervisor",
                 phase="wrap",
                 options=["finish without them", "revive them and continue"],
@@ -1267,9 +1282,19 @@ def phase_wrap(services: Services, project: Project) -> str:
 
     log.agent("historian", "digesting the project into memory …")
     progress = plan.progress()
+    outcome_lines = []
+    for item in plan.items:
+        last = item.last_attempt()
+        tail = shorten(last.summary, 160) if last and last.summary else ""
+        if item.status == "dropped":
+            reason = next((n for n in reversed(item.notes) if n.startswith("triage#")), "")
+            tail = shorten(reason.split(":", 1)[-1].strip(), 160) if reason else tail
+        outcome_lines.append(f"- [{item.status}] {shorten(item.title, 70)}"
+                             + (f" — {tail}" if tail else ""))
     digest_source = "\n\n".join(
         [
             f"# Mission\n{project.mission()}",
+            "# Item outcomes\n" + "\n".join(outcome_lines),
             f"# Decisions\n{project.decisions.render_markdown()}",
             f"# Activity\n{recent_activity(project.journal, 120)}",
         ]

@@ -123,7 +123,11 @@ class ItemTriage(BaseModel):
     new_description: str = Field(description="revise: replacement description; empty otherwise")
     new_acceptance: list[str] = Field(description="revise: replacement acceptance criteria; empty = keep")
     new_verify_commands: list[str] = Field(description="revise: replacement verify commands; empty = keep")
-    split_items: list[PlanItemDraft] = Field(description="split: the smaller replacement items, in order")
+    split_items: list[PlanItemDraft] = Field(
+        description="split: the smaller replacement items, in order. depends_on indices "
+        "refer to positions WITHIN this list; the parent's dependencies are inherited "
+        "and consecutive items are chained automatically"
+    )
     question: str = Field(description="ask_user: the specific decision only a human can make")
 
 

@@ -54,9 +54,13 @@ Rules:
   and shell commands go in the fenced payload as plain text — NEVER inside JSON.
 - Each command runs fresh (no shell state persists); chain with && if needed.
 - Observations are truncated; ask for specific files/lines rather than dumps.
+- In long sessions your earliest turns may be replaced by a summary labeled
+  "Progress so far". Details absent from it are gone — re-read files rather
+  than trusting memory of earlier turns.
 - When the task's acceptance criteria are met and verification passes, use:
   ACTION: finish {"status": "done"}   (with a handoff note in the payload)
-- If you are truly unable to proceed, finish with status "failed" and explain.
+- If you are truly unable to proceed, finish with status "failed" and a
+  payload explaining exactly what blocked you.
 """
 
 

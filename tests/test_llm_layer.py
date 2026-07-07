@@ -114,6 +114,36 @@ def test_truncated_reply_grows_budget_then_recovers():
     assert client.calls[1]["max_tokens"] == 1500
 
 
+def test_one_shot_prose_self_heals_like_the_structured_path():
+    """Regression: the architect's design call was plain client.chat — a reply
+    stranded in the reasoning channel or truncated by thinking surfaced as
+    'empty design output' with no retry."""
+    from engorc.agents.runtime import one_shot_prose
+    from engorc.llm.budget import Section
+
+    brief = [Section(name="Brief", text="build it", priority=1)]
+
+    # the whole answer landed in the reasoning channel
+    client = FakeLLM(lambda *a: ("", "# Design\nthe whole document"))
+    text, _ = one_shot_prose(client, RoleModel(model="m", thinking=True), "sys", brief)
+    assert text.startswith("# Design")
+
+    # thinking ate the budget: retried with a grown budget
+    replies = iter([("<think>endless pondering", "", "length"), "# Design\ndone"])
+    client = FakeLLM(lambda *a: next(replies))
+    text, _ = one_shot_prose(client, RoleModel(model="m", thinking=True), "sys",
+                             brief, max_tokens=1000)
+    assert text == "# Design\ndone"
+    assert client.calls[0]["max_tokens"] == 1000
+    assert client.calls[1]["max_tokens"] == 1500
+
+    # genuinely empty after retries → "" (the phase's journal error remains)
+    client = FakeLLM(lambda *a: ("", "", "length"))
+    text, _ = one_shot_prose(client, RoleModel(model="m"), "sys", brief, retries=1)
+    assert text == ""
+    assert len(client.calls) == 2
+
+
 def test_tool_loop_reply_recovered_from_reasoning_channel():
     from engorc.agents.runtime import parse_action
     from engorc.llm.structured import strip_thinking

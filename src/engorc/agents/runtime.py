@@ -415,19 +415,33 @@ def one_shot_prose(
     system: str,
     sections: list[Section],
     max_tokens: int | None = None,
+    retries: int = 2,
 ) -> tuple[str, LLMUsage]:
+    """One freeform document call with the same self-healing the structured
+    path has: an answer stranded in the reasoning channel is recovered, and a
+    reply whose thinking ate the whole output budget is retried with a grown
+    budget instead of surfacing as an empty document."""
     packer = ContextPacker(
         context_window=role_model.context_window,
         reserve_output=max_tokens or role_model.max_output_tokens,
     )
     packed = packer.pack(sections, fixed_tokens=approx_tokens(system))
-    result = client.chat(
-        role_model,
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": packed.text},
-        ],
-        max_tokens=max_tokens,
-    )
-    text = strip_thinking(result.text) if role_model.thinking else result.text
-    return text.strip(), result.usage
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": packed.text},
+    ]
+    effective_max = max_tokens or role_model.max_output_tokens
+    usage = LLMUsage()
+    for _ in range(retries + 1):
+        result = client.chat(role_model, messages, max_tokens=effective_max)
+        usage += result.usage
+        text = result.text
+        if not strip_thinking(text).strip() and result.reasoning.strip():
+            text = result.reasoning
+        if role_model.thinking:
+            text = strip_thinking(text)
+        if text.strip():
+            return text.strip(), usage
+        if result.finish_reason == "length":
+            effective_max = int(effective_max * 1.5)
+    return "", usage

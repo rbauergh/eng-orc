@@ -25,19 +25,46 @@ def _git(workroom: Path, *argv: str, timeout: float = 60) -> tuple[int, str]:
     return proc.returncode, ((proc.stdout or "") + (proc.stderr or "")).strip()
 
 
+GITIGNORE_SEED = """\
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+node_modules/
+.DS_Store
+"""
+
+_IGNORED_TRACKED = (".venv", "__pycache__", ".pytest_cache", ".ruff_cache",
+                    "dist", "build", "node_modules")
+
+
 def ensure_repo(workroom: Path) -> bool:
     """Initialize a repo (with a sane identity fallback) so history exists from
-    the first attempt. Returns True when the workroom is a git repo."""
+    the first attempt, and seed a .gitignore so build artifacts and the
+    project venv never reach commits or review diffs. Returns True when the
+    workroom is a git repo."""
     code, _ = _git(workroom, "rev-parse", "--git-dir")
-    if code == 0:
-        return True
-    code, out = _git(workroom, "init", "-b", "main")
     if code != 0:
-        return False
-    for key, value in (("user.name", "eng-orc"), ("user.email", "eng-orc@local")):
-        check_code, _ = _git(workroom, "config", key)
-        if check_code != 0:
-            _git(workroom, "config", key, value)
+        code, out = _git(workroom, "init", "-b", "main")
+        if code != 0:
+            return False
+        for key, value in (("user.name", "eng-orc"), ("user.email", "eng-orc@local")):
+            check_code, _ = _git(workroom, "config", key)
+            if check_code != 0:
+                _git(workroom, "config", key, value)
+    gitignore = workroom / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text(GITIGNORE_SEED, encoding="utf-8")
+        # ignoring only stops FUTURE adds — junk already tracked (a committed
+        # .venv) must be untracked and the change committed on its own, so it
+        # never appears inside a work item's review diff
+        _git(workroom, "rm", "-r", "--cached", "--quiet", "--ignore-unmatch",
+             *_IGNORED_TRACKED)
+        commit_all(workroom, "chore: ignore build artifacts and the project venv")
     return True
 
 
@@ -60,10 +87,14 @@ def git_log(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     return ToolResult(ok=code == 0, output=out or "no commits yet")
 
 
+def workroom_dirty(workroom: Path) -> bool:
+    """Uncommitted changes present (respects .gitignore)."""
+    code, out = _git(workroom, "status", "--porcelain")
+    return code == 0 and bool(out.strip())
+
+
 def commit_all(workroom: Path, message: str) -> tuple[bool, str]:
     """Stage everything and commit; used by the integrator phase."""
-    if not ensure_repo(workroom):
-        return False, "workroom is not a git repository and could not be initialized"
     _git(workroom, "add", "-A")
     code, out = _git(workroom, "status", "--porcelain")
     if code == 0 and not out.strip():

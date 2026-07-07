@@ -1103,8 +1103,17 @@ def phase_build(services: Services, project: Project) -> str:
         return "plan is stuck (unrunnable items); asked for your guidance"
 
     ensure_repo(project.workroom)
-    from ..agents.toolbox.git import diff_since, head_sha
+    from ..agents.toolbox.git import commit_all, diff_since, head_sha, workroom_dirty
 
+    # The review diff must contain exactly THIS attempt's work. Leftovers from
+    # earlier unfinished attempts stay in the tree on purpose (resume state) —
+    # checkpoint them away so they are never judged as this item's changes.
+    if workroom_dirty(project.workroom):
+        ok, sha = commit_all(project.workroom,
+                             f"checkpoint: carry-over before '{shorten(item.title, 40)}'")
+        if ok and sha != "nothing to commit":
+            project.journal.append(Kind.COMMIT, item=item.id, sha=sha,
+                                    message="checkpoint: carry-over from earlier attempts")
     sha_before = head_sha(project.workroom)
     role_name = "tester" if _needs_tester(item) else "implementer"
     attempt, result = _run_item_loop(services, project, plan, item, role_name)

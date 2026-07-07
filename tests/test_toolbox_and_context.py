@@ -49,6 +49,79 @@ def test_binary_workroom_content_never_crashes_decoding(ctx):
     assert result.ok and "exit code 0" in result.output
 
 
+def test_ensure_repo_seeds_gitignore_and_untracks_junk(tmp_path):
+    """Regression: no .gitignore meant `git add -A` committed the project
+    venv; a reviewer flagged '.venv in the repository' as an ARCHITECTURE
+    blocker. Existing repos get the junk untracked in a standalone commit."""
+    from engorc.agents.toolbox.git import _git, commit_all, ensure_repo
+
+    workroom = tmp_path / "workroom"
+    workroom.mkdir()
+    ensure_repo(workroom)
+    assert (workroom / ".gitignore").exists()
+    (workroom / ".venv" / "lib").mkdir(parents=True)
+    (workroom / ".venv" / "lib" / "x.py").write_text("junk\n")
+    (workroom / "app.py").write_text("real\n")
+    commit_all(workroom, "feat: app")
+    _, tracked = _git(workroom, "ls-files")
+    assert ".venv/lib/x.py" not in tracked and "app.py" in tracked
+
+    # a pre-existing repo with a committed venv gets migrated on first touch
+    legacy = tmp_path / "legacy"
+    (legacy / ".venv").mkdir(parents=True)
+    (legacy / ".venv" / "big.bin").write_text("x" * 10)
+    (legacy / "main.py").write_text("code\n")
+    _git(legacy, "init", "-b", "main")
+    for key, value in (("user.name", "t"), ("user.email", "t@t")):
+        _git(legacy, "config", key, value)
+    _git(legacy, "add", "-A")
+    _git(legacy, "commit", "-m", "old state with venv committed")
+    ensure_repo(legacy)
+    _, tracked = _git(legacy, "ls-files")
+    assert ".venv/big.bin" not in tracked and "main.py" in tracked
+    assert (legacy / ".venv" / "big.bin").exists()  # untracked, not deleted
+
+
+def test_attempt_diffs_exclude_other_items_leftovers(config):
+    """Regression: reviewers judged one item's diff against other items'
+    uncommitted debris ('scope creep', 'missing files'). A checkpoint commit
+    before each attempt makes the diff exactly the attempt's own work."""
+    from engorc.agents.toolbox.git import _git, commit_all, ensure_repo
+    from engorc.config import Config, IndexConfig, MemoryConfig, RunConfig
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.phases import phase_build
+    from engorc.orchestrator.services import Services
+    from engorc.plan import Plan, WorkItem
+    from engorc.registry import Registry
+
+    cfg = Config(home=config.home, memory=MemoryConfig(backend="local"),
+                 index=IndexConfig(enabled=False),
+                 run=RunConfig(project_venvs=False, review_required=False))
+    project = Registry(cfg).create("isolation mission", title="I")
+    ensure_repo(project.workroom)
+    (project.workroom / "base.py").write_text("base\n")
+    commit_all(project.workroom, "feat: base")
+    # debris from another item's failed attempt, uncommitted on purpose
+    (project.workroom / "leftover.py").write_text("half-finished other item\n")
+
+    item = WorkItem(title="write b", verify_commands=["test -f b.py"])
+    project.save_plan(Plan(items=[item]))
+
+    replies = iter([
+        'writing\n\nACTION: write_file {"path": "b.py"}\n```python\nprint("b")\n```\n',
+        'done\n\nACTION: finish {"status": "done"}\n```payload\nwrote b.py\n```\n',
+    ])
+    services = Services.build(cfg, client=FakeLLM(lambda *a: next(replies)))
+    note = phase_build(services, project)
+    assert "completed" in note
+
+    log_out = _git(project.workroom, "log", "--oneline")[1]
+    assert "checkpoint: carry-over" in log_out
+    # the item's integration commit contains ONLY its own file
+    _, integrated = _git(project.workroom, "show", "--name-only", "--format=", "HEAD")
+    assert "b.py" in integrated and "leftover.py" not in integrated
+
+
 def test_tool_loop_grows_budget_when_thinking_eats_it(ctx, config):
     """Regression: gpt-oss burned its whole output budget reasoning and
     produced empty replies — three identical FORMAT ERRORs with the same

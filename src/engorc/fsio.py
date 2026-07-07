@@ -121,7 +121,9 @@ class FileLock:
                     ) from None
                 time.sleep(self.poll)
         self._fh.truncate(0)
-        self._fh.write(f"pid={os.getpid()} label={label}\n")
+        from .util import iso_now
+
+        self._fh.write(f"pid={os.getpid()} label={label} since={iso_now()}\n")
         self._fh.flush()
 
     def release(self) -> None:
@@ -136,3 +138,28 @@ class FileLock:
 
     def __exit__(self, *exc) -> None:
         self.release()
+
+
+def lock_holder(path: Path) -> dict | None:
+    """Who holds a FileLock right now — None when unheld. Non-blocking probe:
+    stale content from a released lock is never mistaken for a holder because
+    holding is defined by the flock, not the file contents."""
+    if not path.exists():
+        return None
+    try:
+        with open(path) as fh:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as exc:
+                if exc.errno not in (errno.EAGAIN, errno.EACCES):
+                    raise
+                holder: dict = {}
+                for part in fh.read().split():
+                    if "=" in part:
+                        key, value = part.split("=", 1)
+                        holder[key] = value
+                return holder
+            fcntl.flock(fh, fcntl.LOCK_UN)
+            return None
+    except OSError:
+        return None

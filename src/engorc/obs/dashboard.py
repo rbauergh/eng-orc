@@ -79,6 +79,47 @@ class NowLine:
     text: str
 
 
+# What each phase's step is doing, for the "working now" panel. Build only
+# appears here for the gap between picking an item and its first agent turn;
+# a running attempt gets the richer per-item line instead.
+PHASE_WORK = {
+    "scout": "scout surveying the existing codebase",
+    "charter": "charterer drafting charter.yaml",
+    "design": "architect drafting design.md",
+    "plan": "planner decomposing the design into work items",
+    "build": "supervisor picking the next work item",
+    "wrap": "historian digesting the project into memory",
+}
+
+
+def _phase_step_line(services, config) -> NowLine | None:
+    """A phase unit in flight that has no in-progress work item (charter,
+    design, plan, wrap) is still work: the GPU lease says who is stepping."""
+    from ..fsio import lock_holder
+
+    holder = lock_holder(config.gpu_lock_path)
+    if not holder or not holder.get("label"):
+        return None
+    slug = holder["label"]
+    try:
+        project = services.registry.get(slug)
+        from ..orchestrator.supervisor import next_phase
+
+        phase = next_phase(project)
+    except Exception:
+        return None
+    text = f"{phase} phase · {PHASE_WORK.get(phase, 'working')}"
+    since = holder.get("since", "")
+    if since:
+        try:
+            from ..util import parse_iso
+
+            text += f" · step running {human_duration((utc_now() - parse_iso(since)).total_seconds())}"
+        except ValueError:
+            pass
+    return NowLine(slug=slug, text=text)
+
+
 @dataclass
 class Snapshot:
     profile: str
@@ -205,6 +246,11 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
         ):
             tokens_in += int(event.payload.get("prompt_tokens", 0) or 0)
             tokens_out += int(event.payload.get("completion_tokens", 0) or 0)
+
+    if not snapshot.now:
+        phase_line = _phase_step_line(services, config)
+        if phase_line is not None:
+            snapshot.now.append(phase_line)
 
     snapshot.gpu_io = f"completed calls last 5m: {tokens_in:,} tok in / {tokens_out:,} tok out"
     # Interactive intake calls belong to no project journal: without this

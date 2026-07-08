@@ -272,12 +272,62 @@ def test_prompt_gates_answers_by_option_number(config, monkeypatch):
     other = project.gates.open("second question", from_role="charterer")
 
     replies = iter(["2", "q"])
-    monkeypatch.setattr(interactive_module.Prompt, "ask",
-                        staticmethod(lambda *a, **k: next(replies)))
+    monkeypatch.setattr(interactive_module, "read_answer", lambda *a, **k: next(replies))
     answered = prompt_gates(services)
     assert answered == 1
     assert project.gates.get(gate.id).answer == "JSON"
     assert project.gates.get(other.id).status == "open"  # quit before it
+
+
+def test_read_answer_captures_pasted_multiline_input(monkeypatch):
+    """Regression: Prompt.ask read one line — a pasted traceback's first line
+    became the answer and the rest flooded the following prompts."""
+    import io
+
+    import engorc.interactive as interactive_module
+    from engorc.interactive import read_answer
+    from engorc.obs.console import log
+
+    # a paste arrives in one burst: readable, readable, then drained
+    monkeypatch.setattr(interactive_module.sys, "stdin",
+                        io.StringIO("Traceback (most recent call last):\n"
+                                    '  File "main.py", line 3\n'
+                                    "IndexError: list index out of range\n"))
+    readable = iter([True, True, False])
+    monkeypatch.setattr(interactive_module.select, "select",
+                        lambda *a, **k: ([1] if next(readable) else [], [], []))
+    answer = read_answer(log.console)
+    assert answer.splitlines()[0].startswith("Traceback")
+    assert "IndexError" in answer
+
+    # explicit block mode: a lone triple-quote opens and closes
+    monkeypatch.setattr(interactive_module.sys, "stdin",
+                        io.StringIO('"""\nline one\nline two\n"""\n'))
+    answer = read_answer(log.console)
+    assert answer == "line one\nline two"
+
+
+def test_gate_chat_answers_clarifying_questions_before_the_answer(config, monkeypatch):
+    import engorc.interactive as interactive_module
+    from engorc.interactive import prompt_gates
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.services import Services
+
+    def brain(messages, response_format, role_model):
+        assert "Gate clarification" in messages[0]["content"]
+        return "Dropping it is safe: the split items already deliver that work."
+
+    services = Services.build(config, client=FakeLLM(brain))
+    project = Registry(config).create("chatty mission", title="C")
+    gate = project.gates.open("Drop 'Build & Polish' or revive it?", from_role="supervisor")
+
+    replies = iter(["? what happens if I drop it", "drop it", "q"])
+    monkeypatch.setattr(interactive_module, "read_answer", lambda *a, **k: next(replies))
+    answered = prompt_gates(services)
+    assert answered == 1
+    assert project.gates.get(gate.id).answer == "drop it"
+    assert services.client.calls  # the architect was consulted once
+    assert services.client.calls[0]["schema"] == ""  # freeform, not structured
 
 
 def test_missing_model_with_near_miss_name_is_identified(tmp_path):

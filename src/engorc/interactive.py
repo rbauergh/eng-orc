@@ -12,6 +12,8 @@ against the model's own load history) instead of a dead prompt.
 
 from __future__ import annotations
 
+import select
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -19,7 +21,6 @@ from typing import TypeVar
 
 from rich.console import Console
 from rich.markup import escape
-from rich.prompt import Prompt
 
 from .events import Kind
 from .llm.timeline import normalize_states
@@ -27,6 +28,40 @@ from .obs.console import log
 from .util import human_age, shorten
 
 T = TypeVar("T")
+
+BLOCK_MARK = '"""'
+
+
+def read_answer(console: Console, prompt: str = "› ") -> str:
+    """Read one answer that survives multi-line pastes.
+
+    A paste arrives in one burst, so after the first line anything already
+    buffered on stdin is drained into the same answer. A lone triple-quote
+    line opens and closes an explicit block for deliberately typed
+    multi-line input."""
+    console.print(f"[bold]{escape(prompt)}[/bold]", end="")
+    first = sys.stdin.readline()
+    if not first:
+        return ""
+    first = first.rstrip("\n")
+    if first.strip() == BLOCK_MARK:
+        lines: list[str] = []
+        while True:
+            line = sys.stdin.readline()
+            if not line or line.rstrip("\n").strip() == BLOCK_MARK:
+                break
+            lines.append(line.rstrip("\n"))
+        return "\n".join(lines).strip()
+    lines = [first]
+    try:
+        while select.select([sys.stdin], [], [], 0.08)[0]:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            lines.append(line.rstrip("\n"))
+    except Exception:
+        pass  # non-selectable stdin (pipes on exotic platforms): single line
+    return "\n".join(lines).strip()
 
 
 def _open_gates(services, skipped: set[str]):
@@ -63,8 +98,23 @@ def prompt_gates(services, console: Console | None = None, limit: int | None = N
         if gate.options:
             for index, option in enumerate(gate.options, 1):
                 console.print(f"  {index}. {escape(option)}")
-        console.print("[dim]type your answer — or an option number, 's' to skip, 'q' to quit[/dim]")
-        raw = Prompt.ask("[bold]›[/bold]", console=console).strip()
+        console.print(
+            "[dim]type your answer (multi-line paste ok; \"\"\" opens a block) — or an option "
+            "number, '? <question>' to ask about this first, 's' to skip, 'q' to quit[/dim]"
+        )
+        dialogue: list[tuple[str, str]] = []
+        while True:
+            raw = read_answer(console)
+            if raw.startswith("?"):
+                question = raw.lstrip("?").strip()
+                if not question:
+                    continue
+                reply = _gate_chat_reply(services, project, gate, question, dialogue)
+                dialogue.append((question, reply))
+                console.print(f"[cyan]{escape(reply)}[/cyan]")
+                console.print("[dim]answer when ready — or ask another '?' question[/dim]")
+                continue
+            break
         if raw.lower() == "q":
             break
         if not raw or raw.lower() == "s":
@@ -77,6 +127,62 @@ def prompt_gates(services, console: Console | None = None, limit: int | None = N
         log.success(f"answered — {project.root.name} resumes on the next pass")
         answered += 1
     return answered
+
+
+def _gate_chat_reply(services, project, gate, question: str,
+                     dialogue: list[tuple[str, str]]) -> str:
+    """One architect-grade reply to a clarifying question about an open gate —
+    the user interrogates the context BEFORE committing an answer."""
+    from .agents.runtime import one_shot_prose
+    from .llm.budget import Section
+    from .llm.catalog import model_for_agent
+
+    gate_text = gate.question + (f"\n\nContext: {gate.context}" if gate.context else "")
+    sections = [
+        Section(name="The orchestrator's question to the user", text=gate_text, priority=1),
+        Section(name="The user's clarifying question", text=question, priority=1),
+    ]
+    if dialogue:
+        chat = "\n".join(f"User: {q}\nYou: {a}" for q, a in dialogue)
+        sections.append(Section(name="Clarification chat so far", text=chat,
+                                priority=2, truncate="tail"))
+    try:
+        plan = project.load_plan()
+        if gate.item:
+            from .orchestrator.briefs import item_task_text
+
+            item = plan.get(gate.item)
+            sections.append(Section(name="The work item in question",
+                                    text=item_task_text(item), priority=2))
+            if item.notes:
+                sections.append(Section(name="Item notes (failure history)",
+                                        text="\n".join(item.notes[-6:]),
+                                        priority=3, truncate="tail"))
+    except Exception:
+        pass
+    if project.design_path.exists():
+        sections.append(Section(name="Design document",
+                                text=project.design_path.read_text(encoding="utf-8"),
+                                priority=4, truncate="middle"))
+
+    def work() -> str:
+        text, _usage = one_shot_prose(
+            services.client,
+            model_for_agent(services.config, "architect"),
+            ("# Gate clarification\nThe orchestrator asked the user a question; before "
+             "answering, the user asks YOU something about it. Answer concretely in at "
+             "most 5 sentences from the project context. When asked for a recommendation, "
+             "give a specific answer they could type verbatim."),
+            sections,
+            max_tokens=400,
+        )
+        return text
+
+    try:
+        return call_with_progress(services, work, label="thinking about your question") \
+            or "(no answer came back — go with your judgment)"
+    except Exception as exc:
+        return f"(the architect could not answer: {shorten(str(exc), 120)})"
 
 
 # ------------------------------------------------------------- model-wait progress

@@ -42,8 +42,7 @@ def test_intake_defers_to_model_judgment(config, monkeypatch):
 
     services = Services.build(config, client=FakeLLM(_intake_brain()))
     replies = iter(["whatever you want", "y"])
-    monkeypatch.setattr(intake_module.Prompt, "ask",
-                        staticmethod(lambda *a, **k: next(replies)))
+    monkeypatch.setattr(intake_module, "read_answer", lambda *a, **k: next(replies))
     result = run_intake(services)
     assert result is not None
     assert "Python 3.12 (chosen" in result.spec_markdown  # the model decided
@@ -58,7 +57,7 @@ def test_intake_quit_creates_nothing(config, monkeypatch):
     from engorc.intake import run_intake
 
     services = Services.build(config, client=FakeLLM(_intake_brain()))
-    monkeypatch.setattr(intake_module.Prompt, "ask", staticmethod(lambda *a, **k: "quit"))
+    monkeypatch.setattr(intake_module, "read_answer", lambda *a, **k: "quit")
     assert run_intake(services) is None
     assert services.registry.slugs() == []
 

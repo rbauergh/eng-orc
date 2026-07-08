@@ -14,12 +14,11 @@ from functools import partial
 
 from rich.console import Console
 from rich.markup import escape
-from rich.prompt import Prompt
 
 from .agents import load_prompt
 from .agents.schemas import IntakeTurn
 from .events import Kind
-from .interactive import call_with_progress
+from .interactive import call_with_progress, read_answer
 from .llm.budget import Section
 from .llm.catalog import model_for_agent
 from .llm.structured import StructuredCaller
@@ -71,7 +70,8 @@ def run_intake(services, seed: str | None = None,
     title = "untitled project"
     dialogue: list[tuple[str, str]] = []
     console.print("[bold]Project intake[/bold] — answer, defer ('whatever you want'), "
-                  "'show' prints the spec, 'done' finalizes, 'quit' aborts.")
+                  "'show' prints the spec, 'done' finalizes, 'quit' aborts. "
+                  "Multi-line paste works; a lone \"\"\" opens and closes a typed block.")
 
     with interactive_session(config.home, "intake", detail) as session:
         return _intake_loop(services, session, caller, role_model, system,
@@ -116,20 +116,20 @@ def _intake_loop(services, session, caller, role_model, system, seed, spec,
             console.print()
             console.print(spec, markup=False)
             console.print()
-            choice = Prompt.ask("[bold]Create this project?[/bold] (y)es / (t)alk more / (q)uit",
-                                console=console, default="y").strip().lower()
+            choice = (read_answer(console, "Create this project? (y)es / (t)alk more / (q)uit: ")
+                      .strip().lower() or "y")
             if choice.startswith("y"):
                 return IntakeResult(title=title, spec_markdown=spec,
                                     transcript_markdown=_transcript(dialogue, spec))
             if choice.startswith("q"):
                 return None
-            guidance = Prompt.ask("[bold]What should change?[/bold]", console=console).strip()
+            guidance = read_answer(console, "What should change? ")
             dialogue.append(("Is the spec ready to build?", guidance or "keep refining"))
             continue
 
         console.print(f"\n[bold cyan]?[/bold cyan] {escape(turn.question)}")
         while True:
-            answer = Prompt.ask("[bold]›[/bold]", console=console).strip()
+            answer = read_answer(console)
             if answer.lower() == "show":
                 console.print(spec or "(no spec yet)", markup=False)
                 continue

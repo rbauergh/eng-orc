@@ -25,11 +25,18 @@ models:
     name: "Qwen3.6-35B-A3B (UD-IQ4_XS)"
     cmd: |
       ${srv} -m ${models}/Qwen3.6-35B-A3B-UD-IQ4_XS.gguf
-      --jinja -fa on -c 49152 -ngl 99 --n-cpu-moe 32
+      --jinja -fa on -c 49152 -ngl 99 --n-cpu-moe 24
       -ctk q8_0 -ctv q8_0 --cache-reuse 256 --mlock
       --temp 0.6 --top-p 0.95 --top-k 20
-    # tuning: lower --n-cpu-moe until `nvidia-smi` shows ~11 GB used
-    # (each expert layer moved to GPU ≈ +0.31 GB and a bit more speed)
+    # Decode speed is bound by the CPU-resident expert layers: every layer
+    # moved to GPU (--n-cpu-moe minus one) ≈ +0.31 GB VRAM and faster tokens.
+    # Tune by observation: lower it while `nvidia-smi` stays under ~11 GB;
+    # raise it back if the load crashes or VRAM spikes past 11.5 GB.
+    #
+    # Next lever when VRAM allows — speculative decoding (the 4B drafts,
+    # the 35B verifies; ~1.5-2x decode on code): append to cmd above:
+    #   -md ${models}/Qwen3.5-4B-UD-Q4_K_XL.gguf -ngld 99 --draft-max 16 --draft-min 4
+    # (costs ~2.6 GB: pair it with --n-cpu-moe 30, not 24)
     aliases: ["coder", "planner"]
     ttl: 1800
 

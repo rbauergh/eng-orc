@@ -275,6 +275,46 @@ def test_compaction_triggers_on_context_pressure_not_turn_count(ctx, config):
     assert any("compacted" in opening for opening in openings)
 
 
+def test_scout_novelty_earns_turns_past_the_base_cap(ctx, config):
+    """Regression: read-only roles were exempt from earned extension — a scout
+    productively reading NEW ground died at its base cap mid-investigation.
+    New information (a successful never-executed action) now extends it."""
+    from engorc.llm.fake import FakeLLM
+
+    (ctx.workroom / "big.txt").write_text("\n".join(f"l{i}" for i in range(400)))
+    turn = {"n": 0}
+
+    def brain(messages, response_format, role_model):
+        turn["n"] += 1
+        if turn["n"] >= 6:
+            return 'done\n\nACTION: finish {"status": "done"}\n```payload\nreport\n```\n'
+        return f'reading\n\nACTION: read_file {{"path": "big.txt", "start": {turn["n"] * 50}}}\n'
+
+    result = _loop(ctx, config, FakeLLM(brain),
+                   tool_names=("read_file", "finish")).run("brief", "task", max_turns=3)
+    assert result.status == "done"
+    assert result.turns == 6  # past the base cap of 3, earned by new ground
+
+
+def test_scout_repeating_ground_stalls_out(ctx, config):
+    from engorc.llm.fake import FakeLLM
+
+    config.run.stall_turns = 4
+    (ctx.workroom / "a.txt").write_text("a\n")
+    (ctx.workroom / "b.txt").write_text("b\n")
+    flip = {"n": 0}
+
+    def brain(messages, response_format, role_model):
+        flip["n"] += 1  # alternate the SAME two reads: nothing new after turn 2
+        return f'looking\n\nACTION: read_file {{"path": "{"a" if flip["n"] % 2 else "b"}.txt"}}\n'
+
+    result = _loop(ctx, config, FakeLLM(brain),
+                   tool_names=("read_file", "finish")).run("brief", "task", max_turns=40)
+    assert result.status == "stuck"
+    assert "no new information" in result.summary
+    assert result.turns == 6  # last new ground at turn 2 + stall window 4
+
+
 def test_stall_detection_cuts_an_unproductive_loop_early(ctx, config):
     """Regression request: 'failure detection should be more dynamic than a
     hard-coded turn count.' An agent producing no file changes and no new

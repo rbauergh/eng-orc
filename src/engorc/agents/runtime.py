@@ -196,22 +196,21 @@ class ToolLoop:
         token_budget = self.role_model.max_output_tokens
 
         # Dynamic budget: max_turns is the BASE; an agent that keeps producing
-        # (file changes, new command results) earns extension up to a hard
-        # ceiling, while one that stalls is cut long before any cap. Read-only
-        # roles (the scout) keep the plain fixed cap — reading IS their work.
+        # earns extension up to a hard ceiling, while one that stalls is cut
+        # long before any cap. "Producing" is capability-specific: mutating
+        # roles = file changes / new command results; read-only roles (the
+        # scout) = NEW information — a successful action not executed before.
         can_mutate = any(tool.mutates for tool in self.tools.values())
         stall_window = max(4, self.config.run.stall_turns)
-        hard_cap = max_turns * 2 if can_mutate else max_turns
+        hard_cap = max_turns * 2
         last_productive = 0
         last_probe_output = ""
+        seen_signatures: set[str] = set()
 
         for turn_no in range(1, hard_cap + 1):
-            if can_mutate:
-                # the honest deadline: the stall axe or the hard ceiling,
-                # whichever comes first — progress pushes it forward
-                turns_left = max(1, min(hard_cap, last_productive + stall_window) - turn_no + 1)
-            else:
-                turns_left = max_turns - turn_no + 1
+            # the honest deadline: the stall axe or the hard ceiling,
+            # whichever comes first — progress pushes it forward
+            turns_left = max(1, min(hard_cap, last_productive + stall_window) - turn_no + 1)
             messages = self._build_messages(brief, turns, task_recitation, turns_left,
                                             touched, summary_of_compacted)
             try:
@@ -295,15 +294,19 @@ class ToolLoop:
                 if path not in touched:
                     touched.append(path)
 
-            # productivity: a successful mutation, or a command whose output
-            # changed since the last one (re-running the same failing thing
-            # verbatim is not progress)
+            # productivity: a successful mutation or a command with NEW output
+            # for builders; a successful never-before-executed action (new
+            # information) for read-only roles
+            novel = signature not in seen_signatures
+            seen_signatures.add(signature)
             if can_mutate:
                 if result.ok and result.data.get("action") in ("write", "edit"):
                     last_productive = turn_no
                 elif action.tool in ("run", "run_tests") and result.output != last_probe_output:
                     last_probe_output = result.output
                     last_productive = turn_no
+            elif result.ok and novel:
+                last_productive = turn_no
 
             terminal = result.data.get("terminal") if result.data else None
             observation = result.shaped(self.config.run.max_tool_output_chars) + salvage_note
@@ -323,12 +326,13 @@ class ToolLoop:
                     "\n\nNOTE: you repeated the exact same action. If it did not work "
                     "before, it will not work now — change your approach."
                 )
-            if can_mutate and turn_no - last_productive == stall_window - 2:
+            stall_kind = ("no file changes or new command results" if can_mutate
+                          else "no new information (only repeated ground)")
+            if turn_no - last_productive == stall_window - 2:
                 observation += (
-                    f"\n\nNOTE: no file changes or new command results in "
-                    f"{turn_no - last_productive} turns — you appear stuck. Change your "
-                    "approach now, or finish with status \"failed\" and state exactly "
-                    "what blocks you."
+                    f"\n\nNOTE: {stall_kind} in {turn_no - last_productive} turns — you "
+                    "appear stuck. Change your approach now, or finish with status "
+                    "\"failed\" and state exactly what blocks you."
                 )
             target = str(action.args.get("path") or action.args.get("pattern") or "")
             if not target and action.tool in ("run", "run_tests"):
@@ -350,11 +354,10 @@ class ToolLoop:
                 return self._finalize(
                     "stuck", f"repeated the same action three times: {action.tool}", turns, usage_total, touched
                 )
-            if can_mutate and turn_no - last_productive >= stall_window:
+            if turn_no - last_productive >= stall_window:
                 return self._finalize(
                     "stuck",
-                    f"stalled: no file changes or new command results in the last "
-                    f"{turn_no - last_productive} turns",
+                    f"stalled: {stall_kind} in the last {turn_no - last_productive} turns",
                     turns, usage_total, touched,
                 )
 
@@ -373,7 +376,7 @@ class ToolLoop:
                 summary_of_compacted, turns = self._compact(summary_of_compacted, turns)
 
         if result_status is None:
-            if can_mutate and hard_cap - last_productive < stall_window:
+            if hard_cap - last_productive < stall_window:
                 # progressing right up to the ceiling: the work is real, the
                 # item is just bigger than one attempt — say so for triage
                 return self._finalize(

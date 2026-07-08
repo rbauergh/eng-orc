@@ -42,7 +42,8 @@ ROLES: dict[str, RoleSpec] = {
             model_role="coder",
             prompt_file="scout.md",
             tools=LOOP_TOOLS_READONLY,
-            max_turns=12,
+            max_turns=16,  # BASE — novel reads earn extension up to 2x, and
+            # request investigations genuinely need the room
             description="explores an existing codebase and writes the codebase report",
         ),
         RoleSpec(

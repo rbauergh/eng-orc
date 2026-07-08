@@ -58,24 +58,15 @@ models:
       top_p: 0.95
       thinking: true
       supports_schema: false
-    coder-fallback:                 # gpt-oss-20b tuned for the TOOL LOOP: medium
-      model: coder-fast             # reasoning (its native default) with enough
-      context_window: 16384         # output headroom that thinking can never
-      max_output_tokens: 4096       # starve the ACTION line (high stays on the
-      temperature: 1.0              # review seat, where one-shot calls can
-      top_p: 1.0                    # afford to deliberate)
-      thinking: true
-      supports_schema: false
-      extra_body:
-        chat_template_kwargs: {reasoning_effort: medium}
-
 run:
   # After the primary coder burns its attempts on an item, the next attempt
   # runs on a different model family: fresh weights, fresh priors on a stuck
   # problem. (Mid-item switching is deliberately avoided — one consistent
-  # author per attempt.) NOTE: this is the low-reasoning tool-loop tuning of
-  # gpt-oss, distinct from its high-reasoning review seat.
-  coder_fallbacks: [coder-fallback]
+  # author per attempt.) GLM follows the plain-text ACTION protocol; gpt-oss
+  # does not (it insists on its native harmony tool-call channel and burned
+  # every implementer attempt it was given), so gpt-oss serves ONLY on the
+  # review panel, where one-shot JSON plays to its strengths.
+  coder_fallbacks: [third-opinion]
 
 review:
   # Sign-off needs every seat to approve: the builder-family model checks

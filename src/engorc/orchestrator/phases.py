@@ -354,6 +354,41 @@ def phase_plan(services: Services, project: Project) -> str:
     return "planner produced an invalid plan repeatedly; will retry next visit"
 
 
+def _investigate_request(services: Services, project: Project, request_text: str) -> str:
+    """A read-only scout localizes the request in the code BEFORE the planner
+    writes items: for a bug report this is the root-cause pass — items planned
+    from a diagnosis aim at the right files instead of the symptom."""
+    from ..agents.toolbox.git import tracked_files
+
+    if not tracked_files(project.workroom, limit=1):
+        return ""  # nothing to investigate yet
+    spec = role("scout")
+    ctx = ToolContext(project=project, config=services.config, journal=project.journal,
+                      role="scout", index=services.context_for(project).index,
+                      extras={"phase": "request"})
+    log.agent("scout", "investigating the request in the codebase …")
+    loop = ToolLoop(
+        client=services.client,
+        config=services.config,
+        role_name="scout",
+        role_model=model_for_agent(services.config, "scout"),
+        tools=tools_named(*spec.tools),
+        ctx=ctx,
+        journal=project.journal,
+        system_prompt=load_prompt(spec.prompt_file),
+    )
+    result = loop.run(
+        brief=("A change request arrived for this codebase. Investigate BEFORE anything "
+               "is planned: locate the code paths involved; for a bug report, find the "
+               "root cause (read the failing path, cite files and lines). Finish with a "
+               "short report: diagnosis, files involved, the smallest fix you can see, "
+               "and how to reproduce/verify.\n\n## The request\n" + request_text),
+        task_recitation="Investigate the request; finish with diagnosis + files + fix sketch.",
+        max_turns=spec.max_turns,
+    )
+    return result.handoff_md or ""
+
+
 def plan_request(services: Services, project: Project, request_text: str) -> str:
     """Extend an existing project's plan with items for a new bug fix or
     feature request (the natural continuation path). Reactivates wrapped
@@ -362,14 +397,21 @@ def plan_request(services: Services, project: Project, request_text: str) -> str
 
     config = services.config
     plan = project.load_plan()
+    investigation = _investigate_request(services, project, request_text)
     existing = "\n".join(f"- [{i.status}] {i.title}" for i in plan.items) or "(no items yet)"
     system = load_prompt("planner.md") + (
         "\n## Mode\nYou are EXTENDING an existing project's plan with new items for the "
         "user's request. Do not restate or duplicate existing items; depends_on indices "
-        "refer only to YOUR new items; reuse the established stack and conventions."
+        "refer only to YOUR new items; reuse the established stack and conventions.\n"
+        "For a BUG report: plan the fix with test_first=true (the repro test comes first) "
+        "and aim the description and files_hint at the investigation's diagnosis, not the "
+        "symptom."
     )
     sections = [
         Section(name="New request from the user", text=request_text, priority=1),
+        Section(name="Investigation report (a scout already located this in the code — "
+                     "plan items against its diagnosis, files, and fix sketch)",
+                text=investigation, priority=1),
         Section(name="Existing plan (context only — add new items, never duplicates)",
                 text=existing, priority=2),
         Section(name="Charter",
@@ -397,6 +439,8 @@ def plan_request(services: Services, project: Project, request_text: str) -> str
         return "the planner produced no items for this request — try being more specific"
     for item in new_items:
         item.notes.append(f"request: {shorten(request_text.splitlines()[0], 120)}")
+        if investigation:
+            item.notes.append(f"investigation: {shorten(' '.join(investigation.split()), 400)}")
     plan.add_items(new_items)
     problems = plan.validate_graph()
     if problems:

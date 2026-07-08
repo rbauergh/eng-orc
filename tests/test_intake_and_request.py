@@ -62,6 +62,49 @@ def test_intake_quit_creates_nothing(config, monkeypatch):
     assert services.registry.slugs() == []
 
 
+def test_bug_request_gets_a_code_investigation_first(config):
+    """A scout root-causes the request in the code BEFORE the planner writes
+    items; the diagnosis reaches both the planner and the new items' notes."""
+    import json as _json
+
+    from engorc.agents.toolbox.git import commit_all, ensure_repo
+    from engorc.llm.fake import role_of
+
+    project = Registry(config).create("buggy app", title="B")
+    ensure_repo(project.workroom)
+    (project.workroom / "board.py").write_text("def drop(col):\n    return col + 1\n")
+    commit_all(project.workroom, "feat: board")
+
+    seen = {"planner_saw_investigation": False}
+
+    def brain(messages, response_format, role_model):
+        name = (response_format or {}).get("json_schema", {}).get("name", "")
+        if name == "PlanDraft":
+            seen["planner_saw_investigation"] = (
+                "Investigation report" in messages[-1]["content"]
+                and "off-by-one in board.py drop()" in messages[-1]["content"]
+            )
+            return _json.dumps({
+                "reasoning": "fix aimed at the diagnosis", "goal_recap": "fix the crash",
+                "items": [{"title": "Fix column off-by-one", "kind": "fix",
+                           "description": "", "acceptance": ["col 7 click works"],
+                           "verify_commands": [], "depends_on": [], "files_hint": ["board.py"],
+                           "size": "S", "test_first": True}],
+            })
+        if name == "PlanReviewVerdict":
+            return _json.dumps({"reasoning": "ok", "findings": [], "verdict": "approve"})
+        assert role_of(messages) == "scout"
+        return ('found it\n\nACTION: finish {"status": "done"}\n'
+                "```payload\noff-by-one in board.py drop(): returns col + 1\n```\n")
+
+    services = Services.build(config, client=FakeLLM(brain))
+    note = plan_request(services, project, "clicking column 7 crashes with IndexError")
+    assert "queued 1 new item" in note
+    assert seen["planner_saw_investigation"]
+    item = next(i for i in project.load_plan().items if i.title == "Fix column off-by-one")
+    assert any(n.startswith("investigation: off-by-one") for n in item.notes)
+
+
 def _request_brain():
     def brain(messages, response_format, role_model):
         name = (response_format or {}).get("json_schema", {}).get("name", "")

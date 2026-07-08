@@ -152,7 +152,10 @@ def plan_overview_text(plan: Plan, current: WorkItem) -> str:
 
 
 def _attempt_history_section(item: WorkItem) -> Section:
-    if not item.attempts:
+    """Attempt history AND item notes: notes carry request context, plan-review
+    flags, and investigation findings — they must reach the FIRST attempt too,
+    not only retries."""
+    if not item.attempts and not item.notes:
         return Section(name="Prior attempts", text="", priority=2)
     lines = []
     for attempt in item.attempts[-3:]:
@@ -162,12 +165,9 @@ def _attempt_history_section(item: WorkItem) -> Section:
             lines.append(f"  tests: {shorten(attempt.test_summary, 400)}")
     for note in item.notes[-4:]:
         lines.append(f"- note: {shorten(note, 300)}")
-    return Section(
-        name="Prior attempts on this task (do not repeat these failures)",
-        text="\n".join(lines),
-        priority=2,
-        truncate="tail",
-    )
+    name = ("Prior attempts on this task (do not repeat these failures)"
+            if item.attempts else "Notes on this task (context you should use)")
+    return Section(name=name, text="\n".join(lines), priority=2, truncate="tail")
 
 
 def item_brief(

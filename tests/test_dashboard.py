@@ -24,6 +24,8 @@ def test_snapshot_covers_projects_now_and_activity(config):
     item.status = "in_progress"
     item.attempts.append(AttemptRecord(role="implementer", model="coder"))
     project.save_plan(Plan(items=[item]))
+    project.journal.append(Kind.AGENT_TURN, actor="implementer", item=item.id, turn=2,
+                           tool="edit_file", ok=True, target="connect4/ui/renderer.py")
     project.journal.append(Kind.AGENT_TURN, actor="implementer", item=item.id, turn=3,
                            tool="run_tests", ok=False,
                            detail="exit code 1: AssertionError: expected 7 columns, got 6")
@@ -51,6 +53,8 @@ def test_snapshot_covers_projects_now_and_activity(config):
     assert snapshot.now and "implement the [core]" in snapshot.now[0].text
     assert any("run_tests" in line and "FAILED" in line
                and "expected 7 columns" in line for line in snapshot.activity)
+    # successful turns name their target file
+    assert any("edit_file connect4/ui/renderer.py" in line for line in snapshot.activity)
 
     # review blockers and handoff summaries indent under their event lines
     assert any("crashes on empty input" in line for line in snapshot.activity)
@@ -171,6 +175,23 @@ def test_snapshot_carries_the_worked_projects_plan(config):
     assert snapshot.plan_slug == project.root.name
     assert any("▶ the current thing" in line for _, line in snapshot.plan_rows)
     assert any("└─· the next thing" in line for _, line in snapshot.plan_rows)
+
+
+def test_activity_panel_fills_the_available_height():
+    """The feed trims to the terminal's real capacity instead of a fixed 14 —
+    a tall terminal shows a tall feed, and the newest lines always survive."""
+    from engorc.obs.dashboard import _activity_panel
+
+    snapshot = _snapshot(activity=[f"line {i}" for i in range(100)])
+    snapshot.activity_capacity = 60
+    _, panel = _activity_panel(snapshot)
+    lines = panel.renderable.plain.splitlines()
+    assert len(lines) == 60
+    assert lines[-1] == "line 99"  # newest kept, oldest trimmed
+
+    snapshot.activity_capacity = 8
+    _, panel = _activity_panel(snapshot)
+    assert len(panel.renderable.plain.splitlines()) == 8
 
 
 def test_live_layout_shows_project_rows_at_fixed_height(config):

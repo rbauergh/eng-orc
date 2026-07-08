@@ -45,12 +45,14 @@ def _nowrap(markup: str) -> Text:
 
 
 def _turn_line(e: Event) -> str:
+    target = str(e.payload.get("target", "")).strip()
+    head = (f"{e.actor}: turn {e.payload.get('turn')} · {e.payload.get('tool')}"
+            + (f" {target}" if target else ""))
     if e.payload.get("ok"):
-        return f"{e.actor}: turn {e.payload.get('turn')} · {e.payload.get('tool')}"
+        return head
     # a failed turn says WHY — 'FAILED' alone is a question, not information
     detail = str(e.payload.get("detail", "")).replace("\n", " ").strip()
-    suffix = f" — {shorten(detail, 90)}" if detail else ""
-    return f"{e.actor}: turn {e.payload.get('turn')} · {e.payload.get('tool')} · FAILED{suffix}"
+    return head + " · FAILED" + (f" — {shorten(detail, 90)}" if detail else "")
 
 
 EVENT_LINES = {
@@ -151,7 +153,8 @@ class Snapshot:
     now: list[NowLine] = field(default_factory=list)
     plan_slug: str = ""  # project whose plan is shown (the one being worked)
     plan_rows: list[tuple[bool, str]] = field(default_factory=list)  # (is_current, line)
-    activity: list[str] = field(default_factory=list)
+    activity: list[str] = field(default_factory=list)  # generous buffer; render trims
+    activity_capacity: int = 30  # rows the activity panel may fill (set per tick)
     open_gates: int = 0
     sessions: list[dict] = field(default_factory=list)  # live interactive intakes
 
@@ -300,7 +303,7 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
         now_line = _current_attempt_line(project, plan)
         if now_line is not None and meta.state == "active":
             snapshot.now.append(now_line)
-        for event in project.journal.tail(20):
+        for event in project.journal.tail(50):
             merged.append((event.ts, meta.slug, event))
         for event in project.journal.iter_events(
             kinds=[Kind.AGENT_TURN, Kind.STRUCTURED_CALL], since_ts=cutoff
@@ -343,7 +346,7 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
             pass
     merged.sort(key=lambda entry: entry[0])
     expand_limit = None if details else 2
-    for ts, slug, event in merged[-16:]:
+    for ts, slug, event in merged[-80:]:
         formatter = EVENT_LINES.get(event.kind)
         if formatter is None:
             continue
@@ -362,7 +365,9 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
             snapshot.activity.append(
                 f"         ↳ … {len(sublines) - expand_limit} more (orc dashboard --details)"
             )
-    snapshot.activity = snapshot.activity[-(22 if details else 14):]
+    # keep a generous tail; the activity PANEL trims to the terminal's actual
+    # capacity at render time (a tall terminal deserves a full feed)
+    snapshot.activity = snapshot.activity[-150:]
     return snapshot
 
 
@@ -568,8 +573,9 @@ def _now_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
 
 
 def _activity_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
-    text = "\n".join(escape(line) for line in s.activity) or "[dim](no activity yet)[/dim]"
-    return tuple(s.activity), Panel(_nowrap(text), title="recent activity", title_align="left")
+    shown = s.activity[-max(3, s.activity_capacity):]
+    text = "\n".join(escape(line) for line in shown) or "[dim](no activity yet)[/dim]"
+    return tuple(shown), Panel(_nowrap(text), title="recent activity", title_align="left")
 
 
 def _footer_panel(s: Snapshot) -> tuple[tuple, RenderableType]:
@@ -657,6 +663,13 @@ def run_dashboard(services, interval: float = 2.0, once: bool = False,
             layout["plan"].visible = bool(s.plan_rows)
             keys.clear()  # force full repaint into the new geometry
             changed = True
+        # the activity feed fills whatever the terminal actually offers:
+        # total height minus header/footer (3 each), the sized panels, and
+        # the activity panel's own borders (2)
+        fixed = 3 + 3 + 2 + new_sizes[0] + new_sizes[1] + new_sizes[2]
+        if s.plan_rows:
+            fixed += new_sizes[3]
+        s.activity_capacity = max(3, console.size.height - fixed)
         for name, builder in _REGIONS.items():
             key, renderable = builder(s)
             if keys.get(name) != key:

@@ -330,9 +330,12 @@ class ToolLoop:
                     "approach now, or finish with status \"failed\" and state exactly "
                     "what blocks you."
                 )
+            target = str(action.args.get("path") or action.args.get("pattern") or "")
+            if not target and action.tool in ("run", "run_tests"):
+                target = shorten(" ".join(action.payload.split()), 48)
             turns.append(_Turn(assistant=raw_reply, observation=observation))
             self._journal_turn(turn_no, action.tool, result.ok, response.usage,
-                               detail="" if result.ok else result.output)
+                               detail="" if result.ok else result.output, target=target)
 
             if terminal in ("done", "failed"):
                 result_status = terminal
@@ -458,7 +461,7 @@ class ToolLoop:
 
     # -- bookkeeping ----------------------------------------------------------
     def _journal_turn(self, turn: int, tool: str, ok: bool, usage: LLMUsage,
-                      detail: str = "") -> None:
+                      detail: str = "", target: str = "") -> None:
         self.journal.append(
             Kind.AGENT_TURN,
             actor=self.role_name,
@@ -466,6 +469,7 @@ class ToolLoop:
             turn=turn,
             tool=tool,
             ok=ok,
+            target=shorten(target, 80) if target else "",
             detail=shorten(detail, 160) if detail else "",
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,

@@ -35,17 +35,42 @@ BLOCK_MARK = '"""'
 def read_answer(console: Console, prompt: str = "› ") -> str:
     """Read one answer that survives multi-line pastes.
 
-    A paste arrives in one burst, so after the first line anything already
-    buffered on stdin is drained into the same answer. A lone triple-quote
-    line opens and closes an explicit block for deliberately typed
-    multi-line input."""
+    On a real terminal this uses prompt_toolkit's BRACKETED PASTE support:
+    the terminal marks paste start/end explicitly, pasted newlines become
+    buffer content instead of submissions, and Enter sends the whole thing —
+    immune to ConPTY/WSL paste chunking, no timing heuristics. Off-terminal
+    (pipes, tests) it falls back to readline with a buffered-burst drain.
+    A lone triple-quote line opens and closes an explicit block for
+    deliberately TYPED multi-line input in both modes."""
+    if sys.stdin.isatty():
+        try:
+            from prompt_toolkit import prompt as pt_prompt
+
+            try:
+                text = pt_prompt(prompt)
+            except EOFError:
+                return ""
+            if text.strip() == BLOCK_MARK:
+                lines: list[str] = []
+                while True:
+                    try:
+                        line = pt_prompt("… ")
+                    except EOFError:
+                        break
+                    if line.strip() == BLOCK_MARK:
+                        break
+                    lines.append(line)
+                return "\n".join(lines).strip()
+            return text.strip()
+        except ImportError:
+            pass  # prompt_toolkit missing: the readline fallback still works
     console.print(f"[bold]{escape(prompt)}[/bold]", end="")
     first = sys.stdin.readline()
     if not first:
         return ""
     first = first.rstrip("\n")
     if first.strip() == BLOCK_MARK:
-        lines: list[str] = []
+        lines = []
         while True:
             line = sys.stdin.readline()
             if not line or line.rstrip("\n").strip() == BLOCK_MARK:

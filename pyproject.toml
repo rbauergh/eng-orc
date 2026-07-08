@@ -18,6 +18,7 @@ dependencies = [
     "tenacity>=9,<10",
     "typer>=0.12",
     "rich>=13.7",
+    "prompt-toolkit>=3.0",  # bracketed paste: multi-line pastes survive prompts
     "watchfiles>=0.24",
     # orchestration (langgraph 1.x — stable API since 1.0, Oct 2025)
     "langgraph>=1.0,<2",

@@ -85,6 +85,18 @@ def test_guidance_revives_dropped_items(config):
     assert not project.gates.open_gates()
 
 
+def test_drop_worded_answers_confirm_the_wrap():
+    """Regression: the user answered 'Drop them' at the wrap gate and the
+    parser read it as revive-guidance — dropping IS finishing-without."""
+    from engorc.orchestrator.phases import _is_affirmative
+
+    assert _is_affirmative("Drop them")
+    assert _is_affirmative("skip these, the replacements delivered")
+    assert _is_affirmative("finish without them")
+    assert not _is_affirmative("revive them and continue")
+    assert not _is_affirmative("the clock template matters — build it")
+
+
 def test_wrap_without_drops_needs_no_signoff(config):
     project = Registry(config).create("clean mission", title="C")
     project.save_plan(Plan(items=[WorkItem(title="only item", status="done")]))

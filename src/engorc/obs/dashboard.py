@@ -96,6 +96,7 @@ PHASE_WORK = {
     "charter": "charterer drafting charter.yaml",
     "design": "architect drafting design.md",
     "plan": "planner decomposing the design into work items",
+    "request": "scout investigating + planner extending the plan for your request",
     "build": "supervisor picking the next work item",
     "wrap": "historian digesting the project into memory",
 }

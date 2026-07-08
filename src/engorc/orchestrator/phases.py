@@ -377,6 +377,8 @@ def _investigate_request(services: Services, project: Project, request_text: str
         journal=project.journal,
         system_prompt=load_prompt(spec.prompt_file),
     )
+    project.journal.append(Kind.ATTEMPT_STARTED, actor="scout", item="(request)",
+                           attempt="investigation")
     result = loop.run(
         brief=("A change request arrived for this codebase. Investigate BEFORE anything "
                "is planned: locate the code paths involved; for a bug report, find the "
@@ -386,6 +388,15 @@ def _investigate_request(services: Services, project: Project, request_text: str
         task_recitation="Investigate the request; finish with diagnosis + files + fix sketch.",
         max_turns=spec.max_turns,
     )
+    project.journal.append(Kind.ATTEMPT_FINISHED, actor="scout", item="(request)",
+                           status=result.status, summary=shorten(result.summary, 300),
+                           handoff=_handoff_excerpt(result.handoff_md) if result.handoff_md else [])
+    if result.status != "done":
+        # a failed investigation must be a diagnosable event, not a silent
+        # planner downgrade — the summary carries the proximate cause
+        project.journal.append(Kind.ERROR, actor="scout",
+                               error=f"request investigation {result.status}: "
+                                     f"{shorten(result.summary, 300)}")
     return result.handoff_md or ""
 
 
@@ -1295,7 +1306,9 @@ def phase_build(services: Services, project: Project) -> str:
 WRAP_CONFIRMED_NOTE = "user confirmed finishing without this item"
 
 _AFFIRMATIVE_STARTS = ("finish", "wrap", "yes", "y", "ok", "okay", "done", "proceed",
-                       "ship", "close", "confirm", "sure", "fine")
+                       "ship", "close", "confirm", "sure", "fine",
+                       # dropping IS finishing-without at the wrap gate
+                       "drop", "skip", "leave")
 
 
 def _is_affirmative(answer: str) -> bool:
@@ -1455,11 +1468,24 @@ def phase_wrap(services: Services, project: Project) -> str:
             " — report.md written")
 
 
+def phase_request(services: Services, project: Project) -> str:
+    """Process the oldest queued change request: scout investigation, planner
+    extension, plan review — all under the scheduler's lease and visibility."""
+    pending = project.pending_requests()
+    if not pending:
+        return "no pending requests"
+    request = pending[0]
+    note = plan_request(services, project, str(request.get("text", "")))
+    project.mark_request_done(str(request.get("id", "")))
+    return note
+
+
 PHASES = {
     "scout": phase_scout,
     "charter": phase_charter,
     "design": phase_design,
     "plan": phase_plan,
+    "request": phase_request,
     "build": phase_build,
     "wrap": phase_wrap,
 }

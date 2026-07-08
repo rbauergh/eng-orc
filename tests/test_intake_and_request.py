@@ -62,6 +62,47 @@ def test_intake_quit_creates_nothing(config, monkeypatch):
     assert services.registry.slugs() == []
 
 
+def test_queued_request_routes_through_the_scheduler(config):
+    """`orc request` writes intent and returns; the scheduler runs the
+    investigation and planning as a normal phase step — with the lease and
+    dashboard visibility that implies. Outranks 'done'."""
+    import json as _json
+
+    from engorc.fsio import atomic_write_yaml
+    from engorc.orchestrator.phases import phase_request
+    from engorc.orchestrator.supervisor import next_phase
+
+    project = Registry(config).create("living mission", title="L")
+    atomic_write_yaml(project.charter_path, {"ready_to_build": True})
+    project.design_path.write_text("# design\n")
+    project.save_plan(Plan(items=[WorkItem(title="shipped", status="done")]))
+    project.set_phase("done")
+    project.set_state("done", reason="mission wrapped")
+
+    request_id = project.queue_request("add a dark mode toggle")
+    project.set_state("active", reason="change request queued")
+    assert next_phase(project) == "request"  # outranks phase=done
+
+    def brain(messages, response_format, role_model):
+        name = (response_format or {}).get("json_schema", {}).get("name", "")
+        if name == "PlanDraft":
+            return _json.dumps({
+                "reasoning": "one item", "goal_recap": "dark mode",
+                "items": [{"title": "Dark mode toggle", "kind": "feature",
+                           "description": "", "acceptance": ["toggle works"],
+                           "verify_commands": [], "depends_on": [], "files_hint": [],
+                           "size": "S", "test_first": False}],
+            })
+        return _json.dumps({"reasoning": "ok", "findings": [], "verdict": "approve"})
+
+    services = Services.build(config, client=FakeLLM(brain))
+    note = phase_request(services, project)
+    assert "queued 1 new item" in note
+    assert project.pending_requests() == []
+    assert request_id  # consumed, not lost
+    assert next_phase(project) == "build"  # new work flows into the normal loop
+
+
 def test_bug_request_gets_a_code_investigation_first(config):
     """A scout root-causes the request in the code BEFORE the planner writes
     items; the diagnosis reaches both the planner and the new items' notes."""

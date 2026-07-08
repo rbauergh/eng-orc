@@ -186,6 +186,36 @@ class Project:
         atomic_write_text(self.mission_path, current + stamped)
         self.journal.append(Kind.USER_NOTE, actor=author, note=note)
 
+    # -- change requests -----------------------------------------------------------
+    # `orc request` writes intent and returns; the scheduler does the model
+    # work (investigation, planning) under its own lease and visibility.
+    @property
+    def requests_path(self) -> Path:
+        return self.root / "requests.jsonl"
+
+    def queue_request(self, text: str) -> str:
+        from .fsio import append_jsonl
+        from .util import new_id
+
+        request_id = new_id("req")
+        append_jsonl(self.requests_path,
+                     {"record": "queued", "id": request_id, "text": text, "ts": iso_now()})
+        return request_id
+
+    def pending_requests(self) -> list[dict]:
+        from .fsio import iter_jsonl
+
+        rows = list(iter_jsonl(self.requests_path))
+        done = {row.get("id") for row in rows if row.get("record") == "done"}
+        return [row for row in rows
+                if row.get("record") == "queued" and row.get("id") not in done]
+
+    def mark_request_done(self, request_id: str) -> None:
+        from .fsio import append_jsonl
+
+        append_jsonl(self.requests_path,
+                     {"record": "done", "id": request_id, "ts": iso_now()})
+
     # -- charter / plan ------------------------------------------------------------
     def charter(self) -> dict | None:
         return read_yaml(self.charter_path, default=None)

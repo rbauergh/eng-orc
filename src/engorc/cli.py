@@ -203,10 +203,10 @@ def request(
             raise typer.Exit(0)
         text = result.spec_markdown
     proj.append_mission_note(text)
-    from .orchestrator.phases import plan_request
-
-    note = plan_request(svc, proj, text)
-    log.success(note)
+    request_id = proj.queue_request(text)
+    proj.set_state("active", reason="change request queued")
+    log.success(f"request queued ({request_id[-6:]}) — the next `orc run` investigates "
+                "the code, plans the work, and picks it up")
     log.info(f"run it with: orc run {proj.root.name}")
 
 

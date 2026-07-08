@@ -16,6 +16,10 @@ def next_phase(project: Project) -> str:
     """Reconstruct the correct phase from disk facts; the stored phase is a
     hint, not the truth (files may have been edited or half-written)."""
     meta = project.meta
+    # a queued change request outranks "done": a living codebase is never
+    # finished, only quiet — but the definition phases must exist first
+    if project.design_path.exists() and project.pending_requests():
+        return "request"
     if meta.phase == "done":
         return "done"
     if meta.external_workroom and not project.artifacts.exists("codebase-report.md"):

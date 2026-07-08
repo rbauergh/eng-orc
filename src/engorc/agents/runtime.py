@@ -424,6 +424,14 @@ class ToolLoop:
         if touched:
             parts.append("Files you changed so far: " + ", ".join(touched[-10:]))
         parts.append(f"Turns remaining: {turns_left}.")
+        if turns_left <= 3:
+            # convergence pressure: 30 turns of work + a written report beats
+            # 32 turns of work that dies silently at the ceiling
+            parts.append(
+                "FINAL TURNS: finish NOW with what you have — report your findings "
+                "with an honest status. Partial results are useful; running out of "
+                "turns with nothing written is not."
+            )
         return "\n".join(parts)
 
     def _enforce_window(self, messages: list[dict]) -> None:

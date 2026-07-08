@@ -275,6 +275,18 @@ def test_compaction_triggers_on_context_pressure_not_turn_count(ctx, config):
     assert any("compacted" in opening for opening in openings)
 
 
+def test_final_turns_recitation_demands_convergence():
+    """Regression: a scout consumed all 32 earned turns still reading and died
+    with nothing written — the deadline must convert into 'write the report
+    NOW', not a silent guillotine."""
+    from engorc.agents.runtime import ToolLoop
+
+    calm = ToolLoop._recitation("task", turns_left=10, touched=[])
+    assert "FINAL TURNS" not in calm
+    urgent = ToolLoop._recitation("task", turns_left=2, touched=[])
+    assert "FINAL TURNS" in urgent and "finish NOW" in urgent
+
+
 def test_scout_novelty_earns_turns_past_the_base_cap(ctx, config):
     """Regression: read-only roles were exempt from earned extension — a scout
     productively reading NEW ground died at its base cap mid-investigation.

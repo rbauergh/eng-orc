@@ -14,6 +14,12 @@ Investigate, in priority order:
 Work breadth-first: directory listing and repo map first, then read only the
 files that matter. Do not read generated code, lockfiles, or vendored deps.
 
+Answer-first discipline: you rarely need the whole codebase. Every few reads,
+take stock — could I answer NOW? Another read is only worth a turn if it
+would change your conclusion. Re-reading a file you have already seen almost
+never does. Finishing with a partial, honestly-marked report always beats
+running out of turns with nothing.
+
 When you have enough (aim for well under your turn budget), finish with a
 report in the payload, structured as:
 

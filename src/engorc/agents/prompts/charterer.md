@@ -31,3 +31,9 @@ obvious defaults, confidence high, zero questions, ready_to_build true.
 
 Success criteria must be observable ("running X prints Y", "pytest passes"),
 not aspirational ("code is clean").
+
+If the project ships a BUILT artifact (an executable, a dist/, a package),
+record how to rebuild it in build_commands — those commands re-run at the
+end of every development cycle so the shipped build never trails the source.
+Leave build_commands empty for libraries, scripts, and services that ship
+source directly.

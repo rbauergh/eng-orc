@@ -103,6 +103,46 @@ def test_queued_request_routes_through_the_scheduler(config):
     assert next_phase(project) == "build"  # new work flows into the normal loop
 
 
+def test_query_answers_from_evidence_and_touches_nothing(config):
+    """`orc query` — 'was dist/ rebuilt after the fix?' gets a scout-grounded
+    answer; no items are planned, no files change."""
+    from engorc.agents.toolbox.git import commit_all, ensure_repo
+    from engorc.llm.fake import role_of
+    from engorc.orchestrator.phases import investigate_question
+
+    project = Registry(config).create("query mission", title="Q")
+    ensure_repo(project.workroom)
+    (project.workroom / "renderer.py").write_text("pygame.draw\n")
+    commit_all(project.workroom, "fix: renderer")
+
+    def brain(messages, response_format, role_model):
+        assert role_of(messages) == "scout"
+        assert "was dist rebuilt" in messages[1]["content"]
+        return ('answering\n\nACTION: finish {"status": "done"}\n'
+                "```payload\nNo — dist/ predates the renderer fix commit.\n```\n")
+
+    services = Services.build(config, client=FakeLLM(brain))
+    answer = investigate_question(services, project, "was dist rebuilt after the fix?")
+    assert answer.startswith("No — dist/ predates")
+    assert project.load_plan().items == []  # nothing planned
+    from engorc.sessions import active_sessions
+
+    assert active_sessions(config.home) == []  # session cleaned up
+
+
+def test_list_dir_reports_size_and_modified_time(config, project):
+    from engorc.agents.toolbox import ALL_TOOLS, ToolContext
+    from engorc.events import Journal
+
+    ctx = ToolContext(project=project, config=config,
+                      journal=Journal(project.root / "journal"))
+    (project.workroom / "dist").mkdir()
+    (project.workroom / "dist" / "app.exe").write_bytes(b"x" * 42)
+    result = ALL_TOOLS["list_dir"].run(ctx, {"path": "dist"}, "")
+    assert result.ok
+    assert "app.exe  (42 B, modified 20" in result.output  # ISO timestamp present
+
+
 def test_bug_request_gets_a_code_investigation_first(config):
     """A scout root-causes the request in the code BEFORE the planner writes
     items; the diagnosis reaches both the planner and the new items' notes."""

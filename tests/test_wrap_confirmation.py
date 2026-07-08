@@ -97,6 +97,50 @@ def test_drop_worded_answers_confirm_the_wrap():
     assert not _is_affirmative("the clock template matters — build it")
 
 
+def test_wrap_rebuilds_shipped_artifacts_every_cycle(config):
+    """The 'builder' stage: build_commands re-run at wrap (the run IS the
+    regeneration), so a bug fix can never ship a stale dist/."""
+    from engorc.fsio import atomic_write_yaml
+
+    project = Registry(config).create("shipped mission", title="S")
+    atomic_write_yaml(project.charter_path, {
+        "ready_to_build": True,
+        "build_commands": ["printf built > dist.out"],
+    })
+    project.design_path.write_text("# design\n")
+    project.save_plan(Plan(items=[WorkItem(title="only item", status="done")]))
+    services = Services.build(config, client=FakeLLM(_wrap_brain))
+    note = phase_wrap(services, project)
+    assert "1/1 items done" in note
+    assert (project.workroom / "dist.out").read_text() == "built"  # regenerated
+
+
+def test_failing_build_pushes_back_to_the_implementer(config):
+    from engorc.fsio import atomic_write_yaml
+    from engorc.orchestrator.supervisor import next_phase
+
+    project = Registry(config).create("broken build mission", title="B")
+    atomic_write_yaml(project.charter_path, {
+        "ready_to_build": True,
+        "build_commands": ["false"],
+    })
+    project.design_path.write_text("# design\n")
+    project.save_plan(Plan(items=[WorkItem(title="only item", status="done")]))
+    services = Services.build(config, client=FakeLLM(lambda *a: "must not be called"))
+    note = phase_wrap(services, project)
+    assert "build failed at wrap" in note and "Fix the build" in note
+    plan = project.load_plan()
+    fix = next(i for i in plan.items if i.title == "Fix the build")
+    assert fix.kind == "fix" and fix.verify_commands == ["false"]
+    assert "exit 0" in fix.acceptance[0]
+    assert next_phase(project) == "build"  # the cycle reopens
+
+    # a second wrap visit does NOT stack duplicate fix items
+    note = phase_wrap(services, project)
+    assert "already queued" in note
+    assert sum(i.title == "Fix the build" for i in project.load_plan().items) == 1
+
+
 def test_wrap_without_drops_needs_no_signoff(config):
     project = Registry(config).create("clean mission", title="C")
     project.save_plan(Plan(items=[WorkItem(title="only item", status="done")]))

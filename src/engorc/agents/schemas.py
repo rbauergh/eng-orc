@@ -39,6 +39,12 @@ class Charter(BaseModel):
     blocking_questions: list[BlockingQuestion] = Field(
         description="ONLY questions whose answers change the architecture; empty list means proceed"
     )
+    build_commands: list[str] = Field(
+        default_factory=list,
+        description="commands that (re)build the project's SHIPPED artifacts (executable, "
+        "dist/, package) — run at every wrap so builds never go stale; empty when the "
+        "project ships nothing built",
+    )
     ready_to_build: bool
 
 

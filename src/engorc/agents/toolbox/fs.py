@@ -225,8 +225,16 @@ def list_dir(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
         depth = len(path.relative_to(root).parts) - 1
         if depth > 3:
             continue
-        marker = "/" if path.is_dir() else ""
-        entries.append("  " * depth + path.name + marker)
+        if path.is_dir():
+            entries.append("  " * depth + path.name + "/")
+        else:
+            # size + mtime make staleness questions answerable ("was dist/
+            # rebuilt after the fix?") without shell access
+            stat = path.stat()
+            from datetime import UTC, datetime
+
+            modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(timespec="seconds")
+            entries.append(f"{'  ' * depth}{path.name}  ({stat.st_size} B, modified {modified})")
         if len(entries) >= 200:
             entries.append("… (listing truncated at 200 entries)")
             break

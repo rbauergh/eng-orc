@@ -354,20 +354,14 @@ def phase_plan(services: Services, project: Project) -> str:
     return "planner produced an invalid plan repeatedly; will retry next visit"
 
 
-def _investigate_request(services: Services, project: Project, request_text: str) -> str:
-    """A read-only scout localizes the request in the code BEFORE the planner
-    writes items: for a bug report this is the root-cause pass — items planned
-    from a diagnosis aim at the right files instead of the symptom."""
-    from ..agents.toolbox.git import tracked_files
-
-    if not tracked_files(project.workroom, limit=1):
-        return ""  # nothing to investigate yet
+def _scout_loop(services: Services, project: Project, phase: str) -> ToolLoop:
+    """A read-only exploration loop over the workroom — the shared engine for
+    request investigations and ad-hoc project questions."""
     spec = role("scout")
     ctx = ToolContext(project=project, config=services.config, journal=project.journal,
                       role="scout", index=services.context_for(project).index,
-                      extras={"phase": "request"})
-    log.agent("scout", "investigating the request in the codebase …")
-    loop = ToolLoop(
+                      extras={"phase": phase})
+    return ToolLoop(
         client=services.client,
         config=services.config,
         role_name="scout",
@@ -377,6 +371,39 @@ def _investigate_request(services: Services, project: Project, request_text: str
         journal=project.journal,
         system_prompt=load_prompt(spec.prompt_file),
     )
+
+
+def investigate_question(services: Services, project: Project, question: str) -> str:
+    """`orc query`: a scout answers a question about the project's ACTUAL
+    state, from evidence — nothing is planned or modified."""
+    from ..sessions import interactive_session
+
+    with interactive_session(services.config.home, "query",
+                             f"orc query {project.root.name}") as session:
+        session.update("scout answering your question")
+        log.agent("scout", "investigating your question …")
+        result = _scout_loop(services, project, "query").run(
+            brief=("Answer the user's QUESTION about this codebase from evidence — "
+                   "read files, listings (they include sizes and modified times), and "
+                   "git history; never speculate. Finish with the direct answer FIRST, "
+                   "then the evidence (files, commits, timestamps).\n\n## Question\n"
+                   + question),
+            task_recitation="Answer the question with evidence; finish with the answer.",
+            max_turns=role("scout").max_turns,
+        )
+    return result.handoff_md or f"(the scout could not answer — {result.status}: {result.summary})"
+
+
+def _investigate_request(services: Services, project: Project, request_text: str) -> str:
+    """A read-only scout localizes the request in the code BEFORE the planner
+    writes items: for a bug report this is the root-cause pass — items planned
+    from a diagnosis aim at the right files instead of the symptom."""
+    from ..agents.toolbox.git import tracked_files
+
+    if not tracked_files(project.workroom, limit=1):
+        return ""  # nothing to investigate yet
+    log.agent("scout", "investigating the request in the codebase …")
+    loop = _scout_loop(services, project, "request")
     project.journal.append(Kind.ATTEMPT_STARTED, actor="scout", item="(request)",
                            attempt="investigation")
     result = loop.run(
@@ -386,7 +413,7 @@ def _investigate_request(services: Services, project: Project, request_text: str
                "short report: diagnosis, files involved, the smallest fix you can see, "
                "and how to reproduce/verify.\n\n## The request\n" + request_text),
         task_recitation="Investigate the request; finish with diagnosis + files + fix sketch.",
-        max_turns=spec.max_turns,
+        max_turns=role("scout").max_turns,
     )
     project.journal.append(Kind.ATTEMPT_FINISHED, actor="scout", item="(request)",
                            status=result.status, summary=shorten(result.summary, 300),
@@ -416,7 +443,11 @@ def plan_request(services: Services, project: Project, request_text: str) -> str
         "refer only to YOUR new items; reuse the established stack and conventions.\n"
         "For a BUG report: plan the fix with test_first=true (the repro test comes first) "
         "and aim the description and files_hint at the investigation's diagnosis, not the "
-        "symptom."
+        "symptom.\n"
+        "If the project SHIPS built artifacts (an executable, dist/, a package — check "
+        "the existing plan for build items), any change to the shipped code MUST include "
+        "a final item that REBUILDS those artifacts and re-verifies them, depending on "
+        "the fix items. A fixed source tree with a stale build ships the old bug."
     )
     sections = [
         Section(name="New request from the user", text=request_text, priority=1),
@@ -1469,9 +1500,79 @@ def _absorb_wrap_answers(project: Project, plan: Plan) -> str | None:
     return f"revived {len(dropped)} dropped item(s) with your guidance; back to work"
 
 
+_BUILD_FIX_TITLE = "Fix the build"
+
+
+def _detect_build_command(workroom) -> str | None:
+    """Fallback for charters that predate build_commands."""
+    if (workroom / "build.spec").exists():
+        return "python3 -m PyInstaller build.spec"
+    if (workroom / "Makefile").exists():
+        text = (workroom / "Makefile").read_text(encoding="utf-8", errors="replace")
+        if "\nbuild:" in text or text.startswith("build:"):
+            return "make build"
+    if (workroom / "package.json").exists():
+        text = (workroom / "package.json").read_text(encoding="utf-8", errors="replace")
+        if '"build"' in text:
+            return "npm run build --silent"
+    if (workroom / "Cargo.toml").exists():
+        return "cargo build --release --quiet"
+    return None
+
+
+def _build_check(services: Services, project: Project, plan: Plan) -> str | None:
+    """The 'builder' stage, deterministic by design: at every wrap the
+    project's build commands RE-RUN (the run IS the regeneration — shipped
+    artifacts never trail the source). A failing build pushes back: a fix
+    item is queued and the project returns to the build phase. Returns a
+    step note when wrap must wait; None when artifacts are fresh."""
+    charter = project.charter() or {}
+    commands = [str(c) for c in (charter.get("build_commands") or []) if str(c).strip()]
+    if not commands:
+        detected = _detect_build_command(project.workroom)
+        commands = [detected] if detected else []
+    if not commands:
+        return None  # nothing is shipped built — nothing to regenerate
+    if any(i.title == _BUILD_FIX_TITLE and i.status == "dropped" for i in plan.items):
+        # the user consciously dropped the build fix at sign-off: do not
+        # re-queue it forever — wrap proceeds with the build as-is, loudly
+        project.journal.append(Kind.ERROR, actor="builder",
+                               error="wrapping with a failing build (fix item was dropped)")
+        return None
+    log.agent("builder", f"rebuilding shipped artifacts: {'; '.join(commands)}")
+    ctx = ToolContext(project=project, config=services.config, journal=project.journal,
+                      role="builder")
+    report = run_verification(ctx, commands)
+    project.journal.append(Kind.VERIFY_RUN, item="(build)", passed=report.passed,
+                           summary=shorten(report.summary(), 300))
+    if report.passed:
+        return None
+    if any(i.title == _BUILD_FIX_TITLE and i.status not in TERMINAL_STATUSES
+           for i in plan.items):
+        return "the build is still broken; its fix item is already queued"
+    fix = WorkItem(
+        title=_BUILD_FIX_TITLE,
+        kind="fix",
+        description=("The wrap-time rebuild of the shipped artifacts failed. Make the "
+                     "build commands succeed (install missing build tooling into the "
+                     "project venv if needed).\n\nFailure:\n"
+                     + truncate_middle(report.failure_detail(), 1200)),
+        acceptance=["the project's build commands exit 0"],
+        verify_commands=commands,
+    )
+    plan.add_items([fix])
+    project.save_plan(plan)
+    project.journal.append(Kind.ITEM_STATUS, item=fix.id, status="todo")
+    project.set_phase("build")
+    return f"build failed at wrap — queued '{_BUILD_FIX_TITLE}' and returned to build"
+
+
 def phase_wrap(services: Services, project: Project) -> str:
     config = services.config
     plan = project.load_plan()
+    build_note = _build_check(services, project, plan)
+    if build_note:
+        return build_note
     revived = _absorb_wrap_answers(project, plan)
     if revived:
         return revived

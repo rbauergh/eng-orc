@@ -268,6 +268,20 @@ def ask(project: str, note: str) -> None:
     log.success("noted — future briefs will include it")
 
 
+@app.command()
+def query(project: str, question: str) -> None:
+    """Ask a read-only question about a project's ACTUAL state — a scout
+    investigates the workroom and answers with evidence. Nothing is planned
+    or modified."""
+    svc = services()
+    proj = svc.registry.get(project)
+    from .orchestrator.phases import investigate_question
+
+    answer = investigate_question(svc, proj, question)
+    log.console.print()
+    log.console.print(answer, markup=False)
+
+
 # ---------------------------------------------------------------------- visibility
 
 

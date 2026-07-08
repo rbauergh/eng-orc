@@ -220,6 +220,43 @@ def test_edit_file_error_teaches_the_full_action_shape(ctx):
     assert "<<<<<<< SEARCH" in result.output and "```payload" in result.output
 
 
+def test_compaction_triggers_on_context_pressure_not_turn_count(ctx, config):
+    """Compaction fires when the prompt actually nears the model's window
+    (the server's own token count), not at an arbitrary turn number."""
+    from engorc.agents.runtime import ToolLoop
+    from engorc.agents.toolbox import ALL_TOOLS
+    from engorc.config import RoleModel
+    from engorc.events import Journal
+    from engorc.llm.fake import FakeLLM
+
+    (ctx.workroom / "big.txt").write_text(
+        "\n".join(f"line {i}: " + "content " * 12 for i in range(600)))
+    config.run.compact_after_turns = 999  # the turn trigger is out of play
+    openings: list[str] = []
+    turn = {"n": 0}
+
+    def brain(messages, response_format, role_model):
+        if messages[0]["content"].startswith("You compress"):
+            return "compacted summary of the exploration"
+        if len(messages) > 1:
+            openings.append(messages[1]["content"])
+        turn["n"] += 1
+        if turn["n"] >= 9:
+            return 'done\n\nACTION: finish {"status": "done"}\n```payload\nok\n```\n'
+        return f'reading\n\nACTION: read_file {{"path": "big.txt", "start": {turn["n"] * 7}}}\n'
+
+    loop = ToolLoop(
+        client=FakeLLM(brain), config=config, role_name="scout",
+        role_model=RoleModel(model="m", context_window=4000, max_output_tokens=200),
+        tools=[ALL_TOOLS["read_file"], ALL_TOOLS["finish"]], ctx=ctx,
+        journal=Journal(ctx.project.root / "journal"),
+        system_prompt="# Scout",
+    )
+    result = loop.run("brief", "task", max_turns=12)
+    assert result.status == "done"
+    assert any("compacted" in opening for opening in openings)
+
+
 def test_stall_detection_cuts_an_unproductive_loop_early(ctx, config):
     """Regression request: 'failure detection should be more dynamic than a
     hard-coded turn count.' An agent producing no file changes and no new

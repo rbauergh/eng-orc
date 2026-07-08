@@ -183,13 +183,19 @@ def request(
     if interactive or text is None:
         if not log.console.is_terminal:
             raise typer.BadParameter("interactive request needs a terminal — pass the request text")
+        from .agents.toolbox.git import tracked_files
         from .intake import run_intake
 
         design = proj.design_path.read_text(encoding="utf-8") if proj.design_path.exists() else ""
+        files = tracked_files(proj.workroom, limit=120)
+        file_map = ("Existing files (reference them by NAME; a code investigator reads "
+                    "contents after this conversation):\n"
+                    + "\n".join(f"- {f}" for f in files)) if files else ""
         seed = "\n\n".join(p for p in (
             text,
             f"(This is a change request for the EXISTING project '{proj.meta.title}'. "
             f"Existing design follows — spec only the change.)\n\n{design}",
+            file_map,
         ) if p)
         result = run_intake(svc, seed=seed, detail=f"orc request {project} -i")
         if result is None:

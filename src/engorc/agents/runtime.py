@@ -338,7 +338,18 @@ class ToolLoop:
                     turns, usage_total, touched,
                 )
 
-            if len(turns) >= self.config.run.compact_after_turns:
+            # Compact when the conversation actually nears the model's window,
+            # measured by the server's own prompt_tokens for this call (exact,
+            # not estimated). Use the space: 90% — but always fire BEFORE the
+            # window squeezer (context_budget - 400) starts hard-truncating,
+            # which is the lossy cliff compaction exists to avoid. The turn
+            # counter survives only as a fallback for servers that report no
+            # usage numbers.
+            context_budget = self.role_model.context_window - self.role_model.max_output_tokens
+            threshold = min(int(0.90 * context_budget), context_budget - 600)
+            near_window = 0 < threshold < response.usage.prompt_tokens
+            if near_window or (response.usage.prompt_tokens == 0
+                               and len(turns) >= self.config.run.compact_after_turns):
                 summary_of_compacted, turns = self._compact(summary_of_compacted, turns)
 
         if result_status is None:

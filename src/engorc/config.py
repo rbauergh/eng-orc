@@ -93,7 +93,9 @@ class RunConfig(BaseModel):
     max_turns_oneshot_tools: int = 12  # read-only exploration before charter/design
     stall_turns: int = 10  # turns without a file change or new command result → stuck
     review_required: bool = True
-    compact_after_turns: int = 14  # tool-loop turns before history compaction
+    compact_after_turns: int = 14  # FALLBACK compaction trigger, used only when the
+    # server reports no token usage; the primary trigger is real context pressure
+    # (prompt_tokens > 90% of the model's usable window)
     # Model roles the implementer rotates to once the primary coder's attempts
     # on an item have failed (fresh weights bring fresh priors to stuck
     # problems). With max_attempts_per_item=3 and one fallback, attempts run:

@@ -211,6 +211,7 @@ def test_truncated_reply_missing_payload_grows_budget(ctx, config):
 
 
 def test_edit_file_error_teaches_the_full_action_shape(ctx):
+    from engorc.agents.runtime import FORMAT_CONTRACT
     from engorc.agents.toolbox import ALL_TOOLS
 
     (ctx.workroom / "f.py").write_text("x = 1\n")
@@ -218,6 +219,12 @@ def test_edit_file_error_teaches_the_full_action_shape(ctx):
     assert not result.ok
     assert "ACTION: edit_file" in result.output
     assert "<<<<<<< SEARCH" in result.output and "```payload" in result.output
+    # the observed dead loop was a model that wanted to APPEND: give it the
+    # tool it already uses successfully
+    assert "use write_file with the COMPLETE new file contents" in result.output
+    # and the format contract itself carries one fully-worked payload example
+    assert "<<<<<<< SEARCH" in FORMAT_CONTRACT
+    assert "SAME reply" in FORMAT_CONTRACT
 
 
 def test_compaction_triggers_on_context_pressure_not_turn_count(ctx, config):

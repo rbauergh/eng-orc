@@ -91,11 +91,15 @@ def _parse_search_replace(payload: str) -> list[tuple[str, str]] | str:
         i = closer + 1
     if not blocks:
         return (
-            "payload contained no SEARCH/REPLACE blocks. Resend exactly like:\n"
+            "payload contained no SEARCH/REPLACE blocks. The ACTION line and the "
+            "fenced payload must be in ONE reply — resend BOTH together, exactly like:\n"
             'ACTION: edit_file {"path": "<file>"}\n'
             "```payload\n"
             f"{SEARCH_MARK}\n<exact existing lines>\n{DIVIDER_MARK}\n<replacement lines>\n{REPLACE_MARK}\n"
-            "```"
+            "```\n"
+            "If you are ADDING new content (appending a class, a test, a section) "
+            "rather than modifying existing lines, use write_file with the COMPLETE "
+            "new file contents instead — no SEARCH/REPLACE needed."
         )
     return blocks
 

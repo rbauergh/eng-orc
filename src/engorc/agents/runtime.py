@@ -48,6 +48,20 @@ ACTION: tool_name {"arg": "value"}
 raw text here, only when the tool needs content
 ```
 
+The ACTION line and its payload fence must be in the SAME reply — announcing
+an action without its payload does nothing. A complete edit looks like:
+
+ACTION: edit_file {"path": "app.py"}
+```payload
+<<<<<<< SEARCH
+def greet():
+    return "hi"
+=======
+def greet():
+    return "hello"
+>>>>>>> REPLACE
+```
+
 Rules:
 - One ACTION per reply. Never two. Never zero.
 - Args are a small one-line JSON object of scalars. File contents, patches,

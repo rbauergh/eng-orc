@@ -312,6 +312,71 @@ def test_progress_earns_turns_past_the_base_cap(ctx, config):
     assert "still making progress" in result.summary and "too big" in result.summary
 
 
+def test_vector_chunks_serve_live_files_never_the_stale_store(tmp_path, config):
+    """ROOT CAUSE of 'SEARCH text not found': the semantic index stored chunk
+    TEXT at index time, and the index only refreshes at item integration —
+    briefs were quoting file versions that no longer existed. The index now
+    only RANKS; content is re-read from disk, and vanished chunks are dropped."""
+    from types import SimpleNamespace
+
+    from engorc.context.indexer import Snippet
+    from engorc.context.repomap import RepoMap
+    from engorc.context.retriever import HybridRetriever
+
+    workroom = tmp_path / "wr"
+    workroom.mkdir()
+    (workroom / "f.py").write_text("def hover_col(x):\n    return (x - 10) // 40\n")
+    stale = Snippet(path="f.py", text="def hover_col(x):\n    return x // 32\n", score=0.9)
+    retriever = HybridRetriever(
+        workroom=workroom, config=config,
+        repomap=RepoMap(workroom=workroom, cache_dir=tmp_path / "cache",
+                        ignore=[], max_kb=256),
+        index=SimpleNamespace(search=lambda q, top_k=None: [stale]),
+    )
+    out = retriever.gather("hover_col mapping")
+    assert "(x - 10) // 40" in out  # what the file says NOW
+    assert "x // 32" not in out     # what the store remembered
+
+    (workroom / "f.py").write_text("everything_rewritten = True\n")
+    out = retriever.gather("hover_col mapping")
+    assert "x // 32" not in out  # anchor gone → stale chunk dropped entirely
+
+
+def test_edit_file_tolerates_model_drift(ctx):
+    """Regression: 'SEARCH text not found' — models drift from the real file
+    (copied line-number prefixes, trailing whitespace, indentation) and then
+    stall. Unambiguous near-matches now apply; true misses show the closest
+    REAL lines to copy."""
+    from engorc.agents.toolbox import ALL_TOOLS
+
+    (ctx.workroom / "m.py").write_text(
+        "def top():\n    # the hover rect anchors col 5\n    return 5   \n")
+
+    # copied line-number prefixes from read_file output
+    payload = ("<<<<<<< SEARCH\n2|     # the hover rect anchors col 5\n"
+               "3|     return 5   \n=======\n    return 6\n>>>>>>> REPLACE")
+    result = ALL_TOOLS["edit_file"].run(ctx, {"path": "m.py"}, payload)
+    assert result.ok, result.output
+    assert "return 6" in (ctx.workroom / "m.py").read_text()
+
+    # trailing-whitespace drift (the model added spaces the file lacks)
+    (ctx.workroom / "w.py").write_text("def f():\n    return 1\n")
+    payload = "<<<<<<< SEARCH\n    return 1   \n=======\n    return 2\n>>>>>>> REPLACE"
+    result = ALL_TOOLS["edit_file"].run(ctx, {"path": "w.py"}, payload)
+    assert result.ok and "trailing whitespace" in result.output
+    assert "return 2" in (ctx.workroom / "w.py").read_text()
+
+    # indentation drift is the MODEL's error, not tolerated silently — but
+    # the miss teaches with the closest REAL region, numbered and copyable
+    (ctx.workroom / "i.py").write_text("class C:\n    def g(self):\n        return 1\n")
+    payload = ("<<<<<<< SEARCH\ndef g(self):\n    return 1\n=======\n"
+               "def g(self):\n    return 2\n>>>>>>> REPLACE")
+    result = ALL_TOOLS["edit_file"].run(ctx, {"path": "i.py"}, payload)
+    assert not result.ok
+    assert "Closest existing text" in result.output
+    assert "def g(self):" in result.output  # actual file content, copyable
+
+
 def test_stuck_summary_carries_the_proximate_cause(ctx, config):
     from engorc.llm.fake import FakeLLM
 

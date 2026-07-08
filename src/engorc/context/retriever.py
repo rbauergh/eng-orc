@@ -76,10 +76,38 @@ class HybridRetriever:
             snippets = self.index.search(query)
         except Exception:
             return []
-        return [
-            ContextChunk(path=s.path, text=s.text.strip(), label=f"semantic match (score {s.score:.2f})")
-            for s in snippets
-        ]
+        chunks: list[ContextChunk] = []
+        for snippet in snippets:
+            live = self._live_snippet(snippet)
+            if live is None:
+                continue  # the file moved on since indexing — serving the
+                # stored text would hand agents a phantom version to quote
+            text, start, end = live
+            chunks.append(ContextChunk(path=snippet.path, text=text,
+                                       label=f"semantic match (score {snippet.score:.2f})",
+                                       start=start, end=end))
+        return chunks
+
+    def _live_snippet(self, snippet) -> tuple[str, int, int] | None:
+        """The index RANKS; the disk PROVIDES. Stored chunk text is from index
+        time — between refreshes the working tree moves on, and an agent that
+        quotes stale text produces edits that cannot apply."""
+        if getattr(snippet, "span", None):
+            start, end = snippet.span
+            text = self._excerpt(snippet.path, start, end)
+            return (text, start, end) if text else None
+        anchor = next((ln.strip() for ln in snippet.text.splitlines()
+                       if len(ln.strip()) > 8), "")
+        path = self.workroom / snippet.path
+        if not anchor or not path.is_file():
+            return None
+        lines = read_capped(path).splitlines()
+        for i, line in enumerate(lines):
+            if anchor in line:
+                span_len = max(1, len(snippet.text.splitlines()))
+                end = min(len(lines), i + span_len)
+                return "\n".join(lines[i:end]), i + 1, end
+        return None
 
     def _symbol_chunks(self, terms: list[str]) -> list[ContextChunk]:
         chunks: list[ContextChunk] = []

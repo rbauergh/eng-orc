@@ -9,6 +9,8 @@ JSON-escaped.
 from __future__ import annotations
 
 import ast
+import difflib
+import re
 
 from .base import Tool, ToolContext, ToolResult
 
@@ -104,6 +106,61 @@ def _parse_search_replace(payload: str) -> list[tuple[str, str]] | str:
     return blocks
 
 
+_LINE_NUMBER_RE = re.compile(r"^\s*\d+\| ?")
+
+
+def _strip_line_numbers(block: str) -> str:
+    """Models sometimes copy SEARCH lines verbatim from read_file's numbered
+    output ('42| code') — strip the prefixes when every line carries one."""
+    lines = block.splitlines()
+    if lines and all(_LINE_NUMBER_RE.match(ln) for ln in lines if ln.strip()):
+        return "\n".join(_LINE_NUMBER_RE.sub("", ln) for ln in lines)
+    return block
+
+
+def _fuzzy_locate(text: str, search: str) -> tuple[str | None, str]:
+    """Trailing-whitespace-tolerant location of `search`: returns the EXACT
+    slice of the file to replace plus a note. Only an unambiguous single
+    match counts — anything looser is the model's error to correct, and the
+    not-found message shows it the real lines to copy."""
+    file_lines = text.splitlines()
+    search_lines = search.splitlines()
+    n = len(search_lines)
+    if not n or n > len(file_lines):
+        return None, ""
+    rstrip_target = [ln.rstrip() for ln in search_lines]
+    hits: list[int] = []
+    for i in range(len(file_lines) - n + 1):
+        if [ln.rstrip() for ln in file_lines[i:i + n]] == rstrip_target:
+            hits.append(i)
+    if len(hits) == 1:
+        i = hits[0]
+        return "\n".join(file_lines[i:i + n]), "matched ignoring trailing whitespace"
+    return None, ""
+
+
+def _closest_region(text: str, search: str) -> str:
+    """The best-matching real region of the file, numbered — so the model's
+    next SEARCH can copy actual lines instead of guessing again."""
+    file_lines = text.splitlines()[:4000]
+    search_lines = [ln.strip() for ln in search.splitlines()]
+    n = max(1, len(search_lines))
+    joined_search = "\n".join(search_lines)
+    best_i, best_ratio = -1, 0.0
+    for i in range(max(1, len(file_lines) - n + 1)):
+        window = "\n".join(ln.strip() for ln in file_lines[i:i + n])
+        ratio = difflib.SequenceMatcher(None, joined_search, window).ratio()
+        if ratio > best_ratio:
+            best_i, best_ratio = i, ratio
+    if best_i < 0 or best_ratio < 0.3:
+        return ""
+    start = max(0, best_i - 1)
+    end = min(len(file_lines), best_i + n + 1)
+    shown = "\n".join(f"{j + 1}| {file_lines[j]}" for j in range(start, end))
+    return (f"\nClosest existing text (lines {start + 1}-{end}, {best_ratio:.0%} similar) — "
+            f"copy THESE lines exactly into your SEARCH block:\n{shown}")
+
+
 def edit_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     rel = str(args.get("path", ""))
     path = ctx.jail(rel)
@@ -114,33 +171,42 @@ def edit_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
         return ToolResult(ok=False, output=blocks)
     text = path.read_text(encoding="utf-8", errors="replace")
     applied = 0
+    notes: list[str] = []
     for search, replace in blocks:
         if not search.strip():
             return ToolResult(ok=False, output="empty SEARCH section; to create a file use write_file")
+        # models drift from the real file (paraphrased comments, whitespace,
+        # copied line-number prefixes) — degrade gracefully through exact →
+        # de-numbered → whitespace-tolerant, applying only unambiguous matches
+        search = _strip_line_numbers(search)
         count = text.count(search)
-        if count == 0:
-            preview = search.splitlines()[0][:80] if search.splitlines() else ""
-            return ToolResult(
-                ok=False,
-                output=(
-                    f"SEARCH text not found in {rel} (block {applied + 1}, starts with {preview!r}). "
-                    "Read the file again and copy the exact lines, including indentation."
-                ),
-            )
         if count > 1:
             return ToolResult(
                 ok=False,
                 output=f"SEARCH text appears {count} times in {rel}; add surrounding lines to make it unique.",
             )
-        text = text.replace(search, replace, 1)
+        located, note = (search, "") if count == 1 else _fuzzy_locate(text, search)
+        if located is None:
+            preview = search.splitlines()[0][:80] if search.splitlines() else ""
+            return ToolResult(
+                ok=False,
+                output=(
+                    f"SEARCH text not found in {rel} (block {applied + 1}, starts with {preview!r})."
+                    + _closest_region(text, search)
+                ),
+            )
+        if note:
+            notes.append(note)
+        text = text.replace(located, replace, 1)
         applied += 1
     error = _syntax_gate(rel, text)
     if error:
         return ToolResult(ok=False, output=f"{error} — the edit was NOT applied")
     path.write_text(text, encoding="utf-8")
+    suffix = f" ({'; '.join(notes)})" if notes else ""
     return ToolResult(
         ok=True,
-        output=f"applied {applied} edit block(s) to {rel}",
+        output=f"applied {applied} edit block(s) to {rel}{suffix}",
         data={"path": rel, "action": "edit"},
     )
 

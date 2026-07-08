@@ -190,6 +190,36 @@ def test_payload_in_json_args_is_salvaged_with_a_nudge(ctx, config):
     assert "fenced" in second_call and "Accepted this time" in second_call
 
 
+def test_truncated_reply_missing_payload_grows_budget(ctx, config):
+    """Regression: the output budget died right after the ACTION line, the
+    payload fence never appeared, and the tool's emptiness error repeated
+    until stuck — the format-error budget growth never fired because the
+    ACTION line itself parsed fine."""
+    from engorc.llm.fake import FakeLLM
+
+    replies = iter([
+        ('plan\n\nACTION: write_file {"path": "a.py"}\n', "", "length"),
+        'retry\n\nACTION: write_file {"path": "a.py"}\n```payload\nprint("a")\n```\n',
+        'done\n\nACTION: finish {"status": "done"}\n```payload\nwrote a.py\n```\n',
+    ])
+    client = FakeLLM(lambda *a: next(replies))
+    result = _loop(ctx, config, client).run("brief", "task", max_turns=5)
+    assert result.status == "done"
+    assert (ctx.workroom / "a.py").exists()
+    assert client.calls[0]["max_tokens"] == 1000
+    assert client.calls[1]["max_tokens"] == 1500
+
+
+def test_edit_file_error_teaches_the_full_action_shape(ctx):
+    from engorc.agents.toolbox import ALL_TOOLS
+
+    (ctx.workroom / "f.py").write_text("x = 1\n")
+    result = ALL_TOOLS["edit_file"].run(ctx, {"path": "f.py"}, "not a block")
+    assert not result.ok
+    assert "ACTION: edit_file" in result.output
+    assert "<<<<<<< SEARCH" in result.output and "```payload" in result.output
+
+
 def test_stuck_summary_carries_the_proximate_cause(ctx, config):
     from engorc.llm.fake import FakeLLM
 

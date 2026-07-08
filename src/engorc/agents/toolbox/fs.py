@@ -91,8 +91,11 @@ def _parse_search_replace(payload: str) -> list[tuple[str, str]] | str:
         i = closer + 1
     if not blocks:
         return (
-            "payload contained no SEARCH/REPLACE blocks; format:\n"
-            f"{SEARCH_MARK}\n<exact existing lines>\n{DIVIDER_MARK}\n<replacement lines>\n{REPLACE_MARK}"
+            "payload contained no SEARCH/REPLACE blocks. Resend exactly like:\n"
+            'ACTION: edit_file {"path": "<file>"}\n'
+            "```payload\n"
+            f"{SEARCH_MARK}\n<exact existing lines>\n{DIVIDER_MARK}\n<replacement lines>\n{REPLACE_MARK}\n"
+            "```"
         )
     return blocks
 

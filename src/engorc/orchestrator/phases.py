@@ -955,6 +955,16 @@ def _tests_seat(config) -> PanelReviewer:
     return PanelReviewer(model_role="coder", lens="tests")
 
 
+def _test_files_exist(workroom) -> bool:
+    if (workroom / "tests").is_dir():
+        return True
+    for pattern in ("test_*.py", "*_test.py"):
+        for path in workroom.rglob(pattern):
+            if ".venv" not in path.parts and "node_modules" not in path.parts:
+                return True
+    return False
+
+
 def review_tests(
     services: Services, project: Project, item: WorkItem, attempt: AttemptRecord, sha_before: str
 ) -> str | None:
@@ -965,8 +975,14 @@ def review_tests(
 
     diff = truncate_middle(diff_since(project.workroom, sha_before), 20000)
     if not diff.strip():
+        if _test_files_exist(project.workroom):
+            # the tester judged the existing suite sufficient — the prompt
+            # explicitly tells it to say so instead of writing duplicates;
+            # failing that verdict would contradict its own instructions
+            item.notes.append("tester: the existing test suite already covers this item")
+            return None
         attempt.outcome = "fail"
-        attempt.summary = "tester finished without writing any tests"
+        attempt.summary = "tester finished without writing any tests (and none exist)"
         item.notes.append("tester claimed done but produced no test changes")
         return f"tester produced no test changes on '{shorten(item.title, 50)}'; retrying"
     seat = _tests_seat(services.config)

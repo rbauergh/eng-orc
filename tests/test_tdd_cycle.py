@@ -81,13 +81,27 @@ def test_weak_tests_are_rejected_with_findings(tmp_path):
     assert any("test-review[tests]" in n and "encodes no behavior" in n for n in item.notes)
 
 
-def test_no_test_changes_fails_the_tester(tmp_path):
+def test_no_changes_with_an_existing_suite_is_accepted(tmp_path):
+    """Regression: the tester correctly reported 'the suite already covers
+    this item' (as its prompt instructs) and the gate failed it for producing
+    no diff — the gate contradicted the prompt."""
     config, project, item, attempt = _tester_setup(tmp_path)
-    from engorc.agents.toolbox.git import commit_all
+    from engorc.agents.toolbox.git import commit_all, head_sha
 
-    commit_all(project.workroom, "feat: baseline")  # nothing new after this
-    from engorc.agents.toolbox.git import head_sha
+    commit_all(project.workroom, "feat: baseline with tests")  # nothing new after this
+    services = _services_with_verdict(config, "approve", [])
+    note = review_tests(services, project, item, attempt, sha_before=head_sha(project.workroom))
+    assert note is None  # proceed to implementation
+    assert attempt.outcome == "success"
+    assert any("already covers" in n for n in item.notes)
 
+
+def test_no_changes_and_no_tests_still_fails_the_tester(tmp_path):
+    config, project, item, attempt = _tester_setup(tmp_path)
+    from engorc.agents.toolbox.git import commit_all, head_sha
+
+    (project.workroom / "test_thing.py").unlink()  # a truly lazy finish
+    commit_all(project.workroom, "chore: baseline without tests")
     services = _services_with_verdict(config, "approve", [])
     note = review_tests(services, project, item, attempt, sha_before=head_sha(project.workroom))
     assert note is not None and "no test changes" in note

@@ -264,6 +264,17 @@ class ToolLoop:
 
             terminal = result.data.get("terminal") if result.data else None
             observation = result.shaped(self.config.run.max_tool_output_chars) + salvage_note
+            if (not result.ok and not action.payload.strip()
+                    and response.finish_reason == "length"):
+                # the reply was cut off after the ACTION line, before the fence:
+                # a payload-needing tool then fails on emptiness — grow the
+                # budget so the resend can carry its payload
+                token_budget = int(token_budget * 1.5)
+                observation += (
+                    "\n\nNOTE: your reply hit the output token budget before the fenced "
+                    "payload appeared — the budget is now larger; resend this action WITH "
+                    "its payload block."
+                )
             if repeat_count == 1:
                 observation += (
                     "\n\nNOTE: you repeated the exact same action. If it did not work "

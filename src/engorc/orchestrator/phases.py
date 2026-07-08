@@ -994,7 +994,7 @@ def _review_one_seat(
 
 def run_review_panel(
     services: Services, project: Project, item: WorkItem, diff: str,
-    verify_summary: str = "",
+    verify_summary: str = "", base_sha: str = "",
 ) -> list[tuple[PanelReviewer, str, ReviewVerdict]]:
     """Each panelist reviews independently: distinct weights and lenses catch
     failure modes a single (self-preferring) model misses. A panelist whose
@@ -1002,8 +1002,18 @@ def run_review_panel(
     journal record — the surviving panel decides."""
     config = services.config
     panel = config.review.panel or [PanelReviewer()]
+    recorded = project.reviews_for(item.id, base_sha) if base_sha else {}
     results: list[tuple[PanelReviewer, str, ReviewVerdict]] = []
     for seat_no, seat in enumerate(panel, 1):
+        row = recorded.get((seat.lens, seat.model_role))
+        if row is not None:
+            try:
+                verdict = ReviewVerdict.model_validate(row["verdict"])
+                results.append((seat, str(row.get("model", seat.model_role)), verdict))
+                log.agent("reviewer", f"{seat.lens} seat already recorded for this diff — reusing")
+                continue
+            except Exception:
+                pass  # unreadable ledger row: review the seat fresh
         outcome = _review_one_seat(
             services, project, item, diff, seat,
             artifact_name=f"review-{seat_no}-{seat.lens}.md",
@@ -1011,6 +1021,9 @@ def run_review_panel(
         )
         if outcome is not None:
             results.append((seat, outcome[0], outcome[1]))
+            if base_sha:
+                project.record_review(item.id, base_sha, seat.lens, seat.model_role,
+                                      outcome[0], outcome[1].model_dump())
     return results
 
 
@@ -1140,6 +1153,20 @@ def phase_build(services: Services, project: Project) -> str:
     if plan.is_complete():
         project.set_phase("wrap")
         return "all work items complete; wrapping up"
+
+    # An item parked in `review` is a finished implementation whose panel was
+    # interrupted — resume the remaining seats (the ledger replays completed
+    # ones) instead of throwing the attempt away.
+    reviewing = next((i for i in plan.items if i.status == "review"), None)
+    if reviewing is not None:
+        review_attempt = next((a for a in reversed(reviewing.attempts)
+                               if a.outcome == "success" and a.base_sha), None)
+        if review_attempt is None:  # inconsistent leftover: back to the queue
+            plan.set_status(reviewing.id, "todo")
+            project.save_plan(plan)
+        else:
+            log.agent("reviewer", f"resuming the review of '{shorten(reviewing.title, 50)}' …")
+            return _review_and_integrate(services, project, plan, reviewing, review_attempt)
 
     item = supervisor.pick_item(plan, config.run.max_attempts_per_item)
     if item is None:
@@ -1318,9 +1345,47 @@ def phase_build(services: Services, project: Project) -> str:
         suffix = f" (commit {sha})" if sha else ""
         return f"'{shorten(item.title, 50)}' was already satisfied — marked done{suffix}"
 
+    # Persist the review stage BEFORE any panel seat runs: an interruption
+    # mid-review resumes at the remaining seats instead of deleting the
+    # finished attempt and re-implementing from scratch.
+    attempt.base_sha = sha_before
+    plan.set_status(item.id, "review")
+    project.save_plan(plan)
+    return _review_and_integrate(services, project, plan, item, attempt)
+
+
+def _review_and_integrate(services: Services, project: Project, plan: Plan,
+                          item: WorkItem, attempt: AttemptRecord) -> str:
+    """The persisted review stage: verify (cheap, deterministic — also gives
+    reviewers their evidence), run the ledger-aware panel, then integrate or
+    bounce. Re-entrant: a crash at any seat resumes here with the completed
+    seats replayed from the ledger."""
+    config = services.config
+    ctx = ToolContext(project=project, config=config, journal=project.journal,
+                      item_id=item.id, role="verifier")
+    report = run_verification(ctx, item.verify_commands)
+    if not report.passed:
+        # verification regressed since the attempt (flake or workroom drift)
+        attempt.outcome = "fail"
+        attempt.test_summary = truncate_middle(report.summary() + "\n" + report.failure_detail(), 2000)
+        item.notes.append(f"verification failed at review time: {shorten(report.failure_detail(800), 300)}")
+        plan.set_status(item.id, "todo")
+        project.save_plan(plan)
+        return f"verification regressed on '{shorten(item.title, 50)}' before review; retrying"
+
+    from ..agents.toolbox.git import diff_since
+
+    diff = diff_since(project.workroom, attempt.base_sha)
+    if not diff.strip():
+        attempt.summary = "acceptance already satisfied — no changes were needed"
+        sha = _integrate_item(services, project, plan, item)
+        return f"'{shorten(item.title, 50)}' was already satisfied — marked done" \
+               + (f" (commit {sha})" if sha else "")
+
     if config.run.review_required:
         results = run_review_panel(services, project, item, truncate_middle(diff, 24000),
-                                   verify_summary=report.summary())
+                                   verify_summary=report.summary(),
+                                   base_sha=attempt.base_sha)
         if not results:
             project.journal.append(
                 Kind.ERROR, actor="reviewer", item=item.id,

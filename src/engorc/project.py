@@ -216,6 +216,32 @@ class Project:
         append_jsonl(self.requests_path,
                      {"record": "done", "id": request_id, "ts": iso_now()})
 
+    # -- review ledger ---------------------------------------------------------------
+    # Each panel seat's verdict lands here the moment it completes, keyed by
+    # (item, base_sha): a run interrupted at seat 3 of 4 resumes at seat 3
+    # instead of re-implementing the item.
+    @property
+    def reviews_path(self) -> Path:
+        return self.root / "reviews.jsonl"
+
+    def record_review(self, item_id: str, base_sha: str, lens: str,
+                      model_role: str, model: str, verdict: dict) -> None:
+        from .fsio import append_jsonl
+
+        append_jsonl(self.reviews_path,
+                     {"item": item_id, "base_sha": base_sha, "lens": lens,
+                      "model_role": model_role, "model": model,
+                      "verdict": verdict, "ts": iso_now()})
+
+    def reviews_for(self, item_id: str, base_sha: str) -> dict[tuple[str, str], dict]:
+        from .fsio import iter_jsonl
+
+        rows: dict[tuple[str, str], dict] = {}
+        for row in iter_jsonl(self.reviews_path):
+            if row.get("item") == item_id and row.get("base_sha") == base_sha:
+                rows[(str(row.get("lens")), str(row.get("model_role")))] = row
+        return rows
+
     # -- charter / plan ------------------------------------------------------------
     def charter(self) -> dict | None:
         return read_yaml(self.charter_path, default=None)

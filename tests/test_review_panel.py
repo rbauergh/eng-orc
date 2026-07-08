@@ -54,6 +54,53 @@ def item() -> WorkItem:
     return WorkItem(title="Create greet module", acceptance=["greet works"])
 
 
+def test_interrupted_review_resumes_at_the_remaining_seats(tmp_path):
+    """Regression: Ctrl-C during panel seat 3 deleted the finished attempt
+    and restarted the implementer at 1/3. The review stage is now persisted
+    (item status `review` + per-seat ledger): restart replays the completed
+    seats and runs only the remaining ones."""
+    from engorc.agents.toolbox.git import commit_all, ensure_repo, head_sha
+    from engorc.orchestrator.phases import phase_build
+    from engorc.plan import AttemptRecord, Plan
+    from engorc.util import iso_now
+
+    config = _panel_config(tmp_path, [
+        PanelReviewer(model_role="coder", lens="correctness"),
+        PanelReviewer(model_role="coder", lens="adversarial"),
+    ])
+    project = Registry(config).create("resume mission", title="R")
+    ensure_repo(project.workroom)
+    (project.workroom / "base.py").write_text("base\n")
+    commit_all(project.workroom, "feat: base")
+    base_sha = head_sha(project.workroom)
+    (project.workroom / "w.py").write_text("the finished implementation\n")  # uncommitted
+
+    reviewed = WorkItem(title="the reviewed thing", status="review",
+                        verify_commands=["test -f w.py"])
+    reviewed.attempts.append(AttemptRecord(
+        role="implementer", model="coder", outcome="success", ended=iso_now(),
+        base_sha=base_sha, summary="wrote w.py"))
+    project.save_plan(Plan(items=[reviewed]))
+    # seat 1 (correctness) completed and was ledgered before the interruption
+    project.record_review(reviewed.id, base_sha, "correctness", "coder",
+                          "coder-model", json.loads(_approve("already recorded")))
+
+    calls = {"n": 0}
+
+    def brain(messages, response_format, role_model):
+        calls["n"] += 1
+        return _approve("second seat verdict")
+
+    services = _services_with_brain(config, brain)
+    note = phase_build(services, project)
+    assert "completed" in note
+    assert calls["n"] == 1  # ONLY the adversarial seat actually ran
+    refreshed = project.load_plan().get(reviewed.id)
+    assert refreshed.status == "done"
+    assert len(refreshed.attempts) == 1  # nothing deleted, nothing re-attempted
+    assert len(project.reviews_for(reviewed.id, base_sha)) == 2  # both seats on record
+
+
 def test_panel_runs_each_seat_with_its_lens_and_model(tmp_path, item):
     config = _panel_config(tmp_path, [
         PanelReviewer(model_role="coder", lens="correctness"),

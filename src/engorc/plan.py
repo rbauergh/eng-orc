@@ -36,6 +36,7 @@ class AttemptRecord(BaseModel):
     summary: str = ""
     test_summary: str = ""
     transcript: str | None = None  # artifact-relative path
+    base_sha: str = ""  # workroom HEAD when the attempt started (review diffs)
     tokens_in: int = 0
     tokens_out: int = 0
 

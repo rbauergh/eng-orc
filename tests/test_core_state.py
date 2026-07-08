@@ -102,6 +102,27 @@ def test_plan_dag_validation_and_readiness(tmp_path):
     assert len(loaded.items) == 2 and loaded.items[1].depends_on == [loaded.items[0].id]
 
 
+def test_every_routable_phase_is_a_valid_meta_phase():
+    """Regression: the 'request' phase existed in the router and PHASES but
+    not in ProjectMeta's Literal — the scheduler wrote it (attribute mutation
+    skips validation) and every subsequent LOAD of the project crashed."""
+    from typing import get_args
+
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from engorc.orchestrator.phases import PHASES
+    from engorc.project import Phase, ProjectMeta
+
+    valid = set(get_args(Phase))
+    assert set(PHASES) <= valid
+    assert "done" in valid
+    # and bad writes now fail at the write, not at the next load
+    meta = ProjectMeta(slug="s", title="t")
+    with _pytest.raises(ValidationError):
+        meta.phase = "not-a-phase"
+
+
 def test_dangling_attempt_cleanup():
     """A user's Ctrl-C is not a model failure: the interrupted attempt record
     is removed entirely (no budget consumed, displays stay at 1/3), leaving

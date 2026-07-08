@@ -37,7 +37,7 @@ from .gates import GateBook
 from .plan import Plan, load_plan, save_plan
 from .util import iso_now
 
-Phase = Literal["charter", "design", "plan", "build", "wrap", "done"]
+Phase = Literal["scout", "charter", "design", "plan", "request", "build", "wrap", "done"]
 State = Literal["active", "paused", "blocked_on_user", "done", "abandoned"]
 
 PHASE_ORDER: tuple[str, ...] = ("charter", "design", "plan", "build", "wrap", "done")
@@ -45,6 +45,10 @@ RUNNABLE_STATES: tuple[str, ...] = ("active",)
 
 
 class ProjectMeta(BaseModel):
+    # invalid values must fail AT THE WRITE (clear traceback, journaled step
+    # error) — a silently-persisted bad enum poisons every subsequent load
+    model_config = {"validate_assignment": True}
+
     slug: str
     title: str
     phase: Phase = "charter"

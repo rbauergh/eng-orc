@@ -89,8 +89,9 @@ class ModelsConfig(BaseModel):
 class RunConfig(BaseModel):
     clarification_budget: int = 2  # blocking questions an agent may ask per phase
     max_attempts_per_item: int = 3
-    max_turns_coder: int = 40
+    max_turns_coder: int = 40  # BASE turn budget; provable progress earns up to 2x
     max_turns_oneshot_tools: int = 12  # read-only exploration before charter/design
+    stall_turns: int = 10  # turns without a file change or new command result → stuck
     review_required: bool = True
     compact_after_turns: int = 14  # tool-loop turns before history compaction
     # Model roles the implementer rotates to once the primary coder's attempts

@@ -220,6 +220,54 @@ def test_edit_file_error_teaches_the_full_action_shape(ctx):
     assert "<<<<<<< SEARCH" in result.output and "```payload" in result.output
 
 
+def test_stall_detection_cuts_an_unproductive_loop_early(ctx, config):
+    """Regression request: 'failure detection should be more dynamic than a
+    hard-coded turn count.' An agent producing no file changes and no new
+    command results is cut at stall_turns, long before the base cap — after
+    being warned."""
+    from engorc.llm.fake import FakeLLM
+
+    config.run.stall_turns = 4
+    seen: list[str] = []
+    flip = {"n": 0}
+
+    def brain(messages, response_format, role_model):
+        seen.append(messages[-1]["content"])
+        flip["n"] += 1  # alternate two reads so the identical-action detector stays quiet
+        path = "a.txt" if flip["n"] % 2 else "b.txt"
+        return f'looking\n\nACTION: read_file {{"path": "{path}"}}\n'
+
+    (ctx.workroom / "a.txt").write_text("a\n")
+    (ctx.workroom / "b.txt").write_text("b\n")
+    result = _loop(ctx, config, FakeLLM(brain),
+                   tool_names=("read_file", "write_file", "run", "finish")).run(
+        "brief", "task", max_turns=40)
+    assert result.status == "stuck"
+    assert "stalled: no file changes or new command results" in result.summary
+    assert result.turns == 4  # not 40
+    assert any("you appear stuck" in content for content in seen)  # warned first
+
+
+def test_progress_earns_turns_past_the_base_cap(ctx, config):
+    """The inverse: steady progress extends the budget to the hard ceiling,
+    and the final summary tells triage the item is too big — not that the
+    agent failed."""
+    from engorc.llm.fake import FakeLLM
+
+    config.run.stall_turns = 4
+    counter = {"n": 0}
+
+    def brain(messages, response_format, role_model):
+        counter["n"] += 1
+        return (f'building\n\nACTION: write_file {{"path": "part{counter["n"]}.py"}}\n'
+                f"```payload\nprint({counter['n']})\n```\n")
+
+    result = _loop(ctx, config, FakeLLM(brain)).run("brief", "task", max_turns=3)
+    assert result.status == "stuck"
+    assert result.turns == 6  # 2x the base cap: progress earned the extension
+    assert "still making progress" in result.summary and "too big" in result.summary
+
+
 def test_stuck_summary_carries_the_proximate_cause(ctx, config):
     from engorc.llm.fake import FakeLLM
 

@@ -16,7 +16,11 @@ Then pick ONE action per item:
   dependency order; each must be independently verifiable. In split_items,
   depends_on uses 0-based indices WITHIN your split list only; the parent's
   own dependencies are inherited and consecutive splits are chained
-  automatically — usually leave depends_on empty.
+  automatically — usually leave depends_on empty. An attempt that "hit the
+  turn ceiling while still making progress" is CONCLUSIVE evidence for split:
+  do not retry it as-is. The partial work survives in the workroom — write
+  each split item's description so it BUILDS ON what already exists instead
+  of restarting.
 - retry: the failures were environmental or transient (a reviewer model was
   down, a tool timed out) — the work itself was sound. Say so in guidance.
 - drop: the item is NOT required by the charter's success criteria and is

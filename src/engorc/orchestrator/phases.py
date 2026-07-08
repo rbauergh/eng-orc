@@ -1191,6 +1191,19 @@ def phase_build(services: Services, project: Project) -> str:
         project.set_state("blocked_on_user", reason=f"{role_name} asked a question on {item.title}")
         return f"{role_name} parked a question for you (see `orc inbox`)"
 
+    if result.status == "stuck" and "turn ceiling" in result.summary:
+        # progressing at the ceiling is CONCLUSIVE: the item outgrew one
+        # attempt. Route straight to triage to split it — retrying as-is
+        # would spend another full budget rediscovering the same fact.
+        plan.set_status(item.id, "failed")
+        project.save_plan(plan)
+        note = _run_triage(services, project, plan, [item])
+        if note:
+            return f"'{shorten(item.title, 50)}' outgrew one attempt; {note}"
+        plan.set_status(item.id, "todo")  # triage unavailable — classic retry path
+        project.save_plan(plan)
+        return f"{role_name} hit the turn ceiling on '{shorten(item.title, 50)}'; retrying"
+
     if role_name == "tester":
         gate_note = None
         if attempt.outcome == "success" and config.run.review_required and config.run.review_tests:

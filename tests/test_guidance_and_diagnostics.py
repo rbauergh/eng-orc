@@ -228,6 +228,63 @@ def test_triage_repairs_the_dependency_graph(config):
     assert not refreshed.validate_graph()
 
 
+def test_turn_ceiling_routes_straight_to_a_split(config, monkeypatch):
+    """'Too big for one attempt' is a routing signal, not a verdict: a
+    ceiling-hit-while-progressing attempt goes STRAIGHT to triage to split,
+    instead of burning two more full budgets rediscovering the same fact."""
+    import engorc.orchestrator.phases as phases_module
+    from engorc.agents.runtime import AttemptResult
+    from engorc.agents.toolbox.git import ensure_repo
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.phases import phase_build
+    from engorc.orchestrator.services import Services
+
+    project = Registry(config).create("big item mission", title="B")
+    ensure_repo(project.workroom)
+    item = WorkItem(title="Build the entire UI layer")
+    plan = Plan(items=[item])
+    project.save_plan(plan)
+
+    ceiling_summary = ("hit the turn ceiling (80) while still making progress — "
+                       "the item is likely too big for one attempt")
+
+    def fake_loop(services, project, plan, the_item, role_name):
+        attempt = AttemptRecord(role=role_name, model="coder", outcome="stuck",
+                                ended=iso_now(), summary=ceiling_summary)
+        the_item.attempts.append(attempt)
+        return attempt, AttemptResult(status="stuck", summary=ceiling_summary)
+
+    monkeypatch.setattr(phases_module, "_run_item_loop", fake_loop)
+
+    split_payload = {
+        "reasoning": "conclusive ceiling signal",
+        "items": [{
+            "item_id": item.id, "action": "split",
+            "diagnosis": "the item outgrew one attempt; the partial UI work exists",
+            "guidance": "", "new_description": "", "new_acceptance": [],
+            "new_verify_commands": [],
+            "split_items": [
+                {"title": "UI: board rendering", "kind": "feature", "description": "",
+                 "acceptance": [], "verify_commands": [], "depends_on": [],
+                 "files_hint": [], "size": "S", "test_first": False},
+                {"title": "UI: menus and game-over", "kind": "feature", "description": "",
+                 "acceptance": [], "verify_commands": [], "depends_on": [],
+                 "files_hint": [], "size": "S", "test_first": False},
+            ],
+            "question": "",
+        }],
+        "systemic_notes": [],
+    }
+    services = Services.build(config, client=FakeLLM(_triage_brain(split_payload)))
+    note = phase_build(services, project)
+    assert "outgrew one attempt" in note
+
+    refreshed = project.load_plan()
+    titles = {i.title: i.status for i in refreshed.items}
+    assert titles["Build the entire UI layer"] == "dropped"
+    assert "UI: board rendering" in titles and "UI: menus and game-over" in titles
+
+
 def test_triage_ask_user_opens_informed_gate(config):
     from engorc.llm.fake import FakeLLM
     from engorc.orchestrator.phases import _run_triage

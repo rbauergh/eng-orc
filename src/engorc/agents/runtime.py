@@ -68,6 +68,10 @@ class FormatError(Exception):
     pass
 
 
+# args keys that models mistakenly use instead of the fenced payload block
+_PAYLOAD_ARG_KEYS = ("payload", "content", "command", "cmd", "script", "code", "body", "text")
+
+
 @dataclass
 class ParsedAction:
     thought: str
@@ -212,6 +216,24 @@ class ToolLoop:
                     )
                 continue
 
+            # A model that puts content in a JSON arg instead of the fence made
+            # a formatting mistake, not a semantic one — the string already
+            # survived JSON parsing, so use it (a whole attempt died repeating
+            # this exact mistake against a pedantic rejection).
+            salvage_note = ""
+            if not action.payload.strip():
+                for key in _PAYLOAD_ARG_KEYS:
+                    value = action.args.get(key)
+                    if isinstance(value, str) and value.strip():
+                        action.payload = value
+                        action.args = {k: v for k, v in action.args.items() if k != key}
+                        salvage_note = (
+                            f"\n\nNOTE: you passed {key!r} inside the JSON args; content "
+                            "belongs in the fenced ```payload block. Accepted this time — "
+                            "use the fence next time."
+                        )
+                        break
+
             signature = f"{action.tool}|{json.dumps(action.args, sort_keys=True)}|{hash(action.payload)}"
             if signature == last_signature:
                 repeat_count += 1
@@ -239,7 +261,7 @@ class ToolLoop:
                     touched.append(path)
 
             terminal = result.data.get("terminal") if result.data else None
-            observation = result.shaped(self.config.run.max_tool_output_chars)
+            observation = result.shaped(self.config.run.max_tool_output_chars) + salvage_note
             if repeat_count == 1:
                 observation += (
                     "\n\nNOTE: you repeated the exact same action. If it did not work "
@@ -367,6 +389,12 @@ class ToolLoop:
         usage: LLMUsage,
         touched: list[str],
     ) -> AttemptResult:
+        if status in ("stuck", "error") and turns:
+            # the proximate cause travels with the outcome: "ran out of turns"
+            # alone tells a dashboard reader nothing
+            head = next(iter(turns[-1].observation.strip().splitlines()), "")
+            if head:
+                summary = f"{summary} — last observation: {shorten(head, 140)}"
         transcript = self._render_transcript(turns, status, summary)
         subdir = f"attempts/{self.ctx.item_id or 'phase'}"
         name = f"{self.role_name}-{iso_now().replace(':', '')}.md"

@@ -148,6 +148,58 @@ def test_tool_loop_grows_budget_when_thinking_eats_it(ctx, config):
     assert client.calls[1]["max_tokens"] == 1500
 
 
+def _loop(ctx, config, client, tool_names=("run", "write_file", "finish"), max_output=1000):
+    from engorc.agents.runtime import ToolLoop
+    from engorc.agents.toolbox import ALL_TOOLS
+    from engorc.config import RoleModel
+    from engorc.events import Journal
+
+    return ToolLoop(
+        client=client, config=config, role_name="tester",
+        role_model=RoleModel(model="m", max_output_tokens=max_output),
+        tools=[ALL_TOOLS[n] for n in tool_names], ctx=ctx,
+        journal=Journal(ctx.project.root / "journal"),
+        system_prompt="# Tester",
+    )
+
+
+def test_payload_in_json_args_is_salvaged_with_a_nudge(ctx, config):
+    """Regression: the tester spent 50 turns repeating
+    ACTION: run {"payload": "..."} against 'run needs the shell command in the
+    fenced payload'. The string already survived JSON parsing — accept it and
+    teach the fence instead of burning the attempt."""
+    from engorc.llm.fake import FakeLLM
+
+    seen: list[list[dict]] = []
+    replies = iter([
+        'testing\n\nACTION: run {"payload": "echo salvaged-ok"}\n',
+        'writing\n\nACTION: write_file {"path": "t.py", "content": "print(1)"}\n',
+        'done\n\nACTION: finish {"status": "done"}\n```payload\nall good\n```\n',
+    ])
+
+    def brain(messages, response_format, role_model):
+        seen.append(messages)
+        return next(replies)
+
+    result = _loop(ctx, config, FakeLLM(brain)).run("brief", "task", max_turns=5)
+    assert result.status == "done"
+    assert (ctx.workroom / "t.py").read_text().strip() == "print(1)"
+    # the run executed AND the model was taught the fence
+    second_call = seen[1][-1]["content"]
+    assert "salvaged-ok" in second_call
+    assert "fenced" in second_call and "Accepted this time" in second_call
+
+
+def test_stuck_summary_carries_the_proximate_cause(ctx, config):
+    from engorc.llm.fake import FakeLLM
+
+    fail = 'try\n\nACTION: run {}\n```payload\nfalse\n```\n'
+    result = _loop(ctx, config, FakeLLM(lambda *a: fail)).run("brief", "task", max_turns=2)
+    assert result.status == "stuck"
+    assert "last observation:" in result.summary
+    assert "exit code 1" in result.summary
+
+
 def test_step_errors_carry_the_crash_site(config, monkeypatch):
     """Regression: '[system] utf-8 codec can't decode…' gave no clue WHERE —
     step errors now journal the exception type and deepest frame."""

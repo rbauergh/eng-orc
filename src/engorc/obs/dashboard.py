@@ -58,7 +58,7 @@ EVENT_LINES = {
     Kind.AGENT_TURN: _turn_line,
     Kind.ATTEMPT_STARTED: lambda e: f"{e.actor} started on {e.item}",
     Kind.ATTEMPT_FINISHED: lambda e: (
-        f"{e.actor} {e.payload.get('status')}: {shorten(e.payload.get('summary', ''), 70)}"
+        f"{e.actor} {e.payload.get('status')}: {shorten(e.payload.get('summary', ''), 120)}"
     ),
     Kind.VERIFY_RUN: lambda e: (
         "verify: PASS" if e.payload.get("passed")

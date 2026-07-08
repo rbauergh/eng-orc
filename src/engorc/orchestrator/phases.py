@@ -897,6 +897,13 @@ def _run_item_loop(
     if result.status == "done" and handoff_lines:
         for line in handoff_lines:
             log.info(f"    ↳ {line}")
+    if result.status in ("stuck", "error") and result.handoff_md:
+        # the salvage distillation: the next attempt inherits this one's
+        # knowledge via the item notes instead of re-reading everything
+        item.notes.append(
+            f"salvage from the last {role_name} attempt: "
+            + shorten(" ".join(result.handoff_md.split()), 300)
+        )
     if result.handoff_md:
         handoff = Handoff(
             from_role=role_name,

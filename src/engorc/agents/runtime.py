@@ -197,10 +197,10 @@ class ToolLoop:
 
         # Dynamic budget: max_turns is the BASE; an agent that keeps producing
         # earns extension up to a hard ceiling, while one that stalls is cut
-        # long before any cap. "Producing" is capability-specific: mutating
-        # roles = file changes / new command results; read-only roles (the
-        # scout) = NEW information — a successful action not executed before.
-        can_mutate = any(tool.mutates for tool in self.tools.values())
+        # long before any cap. "Producing" = NEW ground: a successful action
+        # not executed before (novel reads ARE work — discovery phases read a
+        # lot before writing), or a re-run command whose output changed.
+        # Repetition — same reads, same failing run verbatim — is the stall.
         stall_window = max(4, self.config.run.stall_turns)
         hard_cap = max_turns * 2
         last_productive = 0
@@ -294,19 +294,14 @@ class ToolLoop:
                 if path not in touched:
                     touched.append(path)
 
-            # productivity: a successful mutation or a command with NEW output
-            # for builders; a successful never-before-executed action (new
-            # information) for read-only roles
             novel = signature not in seen_signatures
             seen_signatures.add(signature)
-            if can_mutate:
-                if result.ok and result.data.get("action") in ("write", "edit"):
-                    last_productive = turn_no
-                elif action.tool in ("run", "run_tests") and result.output != last_probe_output:
-                    last_probe_output = result.output
-                    last_productive = turn_no
-            elif result.ok and novel:
+            if (result.ok and novel) or (
+                action.tool in ("run", "run_tests") and result.output != last_probe_output
+            ):
                 last_productive = turn_no
+            if action.tool in ("run", "run_tests"):
+                last_probe_output = result.output
 
             terminal = result.data.get("terminal") if result.data else None
             observation = result.shaped(self.config.run.max_tool_output_chars) + salvage_note
@@ -326,8 +321,7 @@ class ToolLoop:
                     "\n\nNOTE: you repeated the exact same action. If it did not work "
                     "before, it will not work now — change your approach."
                 )
-            stall_kind = ("no file changes or new command results" if can_mutate
-                          else "no new information (only repeated ground)")
+            stall_kind = "no new information, file changes, or command results"
             if turn_no - last_productive == stall_window - 2:
                 observation += (
                     f"\n\nNOTE: {stall_kind} in {turn_no - last_productive} turns — you "
@@ -494,12 +488,33 @@ class ToolLoop:
         usage: LLMUsage,
         touched: list[str],
     ) -> AttemptResult:
+        salvage = ""
         if status in ("stuck", "error") and turns:
             # the proximate cause travels with the outcome: "ran out of turns"
             # alone tells a dashboard reader nothing
             head = next(iter(turns[-1].observation.strip().splitlines()), "")
             if head:
                 summary = f"{summary} — last observation: {shorten(head, 140)}"
+            if len(turns) >= 3:
+                # a dead attempt's KNOWLEDGE must not die with it: distill the
+                # transcript so the next attempt inherits what this one learned
+                # instead of re-reading everything from scratch
+                rendered = "\n\n".join(
+                    f"[assistant]\n{truncate_middle(t.assistant, 800)}\n[result]\n"
+                    f"{truncate_middle(t.observation, 600)}"
+                    for t in turns
+                )
+                from ..context.summarizer import summarize
+
+                salvage = summarize(
+                    self.client,
+                    self.config.models.utility,
+                    rendered,
+                    "This agent attempt died before finishing. Distill what it LEARNED for "
+                    "its successor: files read and the key facts in them, changes made, what "
+                    "was in progress, and what remained. Exact file names; no narrative.",
+                    max_tokens=300,
+                )
         transcript = self._render_transcript(turns, status, summary)
         subdir = f"attempts/{self.ctx.item_id or 'phase'}"
         name = f"{self.role_name}-{iso_now().replace(':', '')}.md"
@@ -509,6 +524,7 @@ class ToolLoop:
         return AttemptResult(
             status=status,  # type: ignore[arg-type]
             summary=summary,
+            handoff_md=salvage,
             turns=len(turns),
             tokens_in=usage.prompt_tokens,
             tokens_out=usage.completion_tokens,

@@ -329,9 +329,9 @@ def test_scout_repeating_ground_stalls_out(ctx, config):
 
 def test_stall_detection_cuts_an_unproductive_loop_early(ctx, config):
     """Regression request: 'failure detection should be more dynamic than a
-    hard-coded turn count.' An agent producing no file changes and no new
-    command results is cut at stall_turns, long before the base cap — after
-    being warned."""
+    hard-coded turn count.' An agent covering no new ground is cut at
+    stall_turns — after being warned — and its knowledge is salvaged for
+    the next attempt instead of dying with the transcript."""
     from engorc.llm.fake import FakeLLM
 
     config.run.stall_turns = 4
@@ -339,8 +339,10 @@ def test_stall_detection_cuts_an_unproductive_loop_early(ctx, config):
     flip = {"n": 0}
 
     def brain(messages, response_format, role_model):
+        if messages[0]["content"].startswith("You compress"):
+            return "salvage: read a.txt and b.txt; both trivial; nothing written yet"
         seen.append(messages[-1]["content"])
-        flip["n"] += 1  # alternate two reads so the identical-action detector stays quiet
+        flip["n"] += 1  # alternate the SAME two reads: novel only twice
         path = "a.txt" if flip["n"] % 2 else "b.txt"
         return f'looking\n\nACTION: read_file {{"path": "{path}"}}\n'
 
@@ -350,9 +352,10 @@ def test_stall_detection_cuts_an_unproductive_loop_early(ctx, config):
                    tool_names=("read_file", "write_file", "run", "finish")).run(
         "brief", "task", max_turns=40)
     assert result.status == "stuck"
-    assert "stalled: no file changes or new command results" in result.summary
-    assert result.turns == 4  # not 40
+    assert "stalled: no new information" in result.summary
+    assert result.turns == 6  # 2 novel reads + the 4-turn stall window; not 40
     assert any("you appear stuck" in content for content in seen)  # warned first
+    assert "salvage: read a.txt and b.txt" in result.handoff_md  # knowledge kept
 
 
 def test_progress_earns_turns_past_the_base_cap(ctx, config):

@@ -132,12 +132,22 @@ class StructuredCaller:
         last_text = ""
         errors = ""
         effective_max = max_tokens if max_tokens is not None else role_model.max_output_tokens
+        length_failures = 0
         for round_no in range(repair_rounds + 1):
+            # a second budget death means MORE budget is not the fix — on a
+            # thinking model, longer budgets buy longer rumination. Disable
+            # thinking for the retry; the schema's reasoning field is where
+            # deliberation belongs. (Unknown template kwargs are ignored, so
+            # this is safe across model families.)
+            override = ({"chat_template_kwargs": {"enable_thinking": False,
+                                                  "reasoning_effort": "low"}}
+                        if length_failures >= 2 else None)
             result: LLMResult = self.client.chat(
                 role_model,
                 convo,
                 response_format=response_format,
                 max_tokens=effective_max,
+                extra_body=override,
             )
             self.usage += result.usage
             last_text = result.text
@@ -156,6 +166,7 @@ class StructuredCaller:
                     # a truncated reply is a budget problem, not a comprehension
                     # problem — quoting validator errors back cannot fix it.
                     # Grow the budget and ask for terser reasoning instead.
+                    length_failures += 1
                     effective_max = int(effective_max * 1.5)
                     errors = f"reply hit the output token budget before completing; {errors}"
                     repair = (

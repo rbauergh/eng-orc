@@ -63,6 +63,7 @@ class FakeLLM:
                 "schema": _schema_name(response_format),
                 "system_head": (messages[0]["content"].splitlines() or [""])[0] if messages else "",
                 "max_tokens": max_tokens,
+                "extra_body": extra_body,
             }
         )
         if stream_cb is not None:

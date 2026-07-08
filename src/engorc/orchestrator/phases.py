@@ -564,7 +564,11 @@ def _triage_evidence(project: Project, plan: Plan, items: list[WorkItem]) -> str
         for note in item.notes[-8:]:
             lines.append(f"- note: {shorten(note, 220)}")
         parts.append("\n".join(lines))
-    errors = project.journal.tail(10, kinds=[Kind.ERROR])
+    # triage's OWN systemic notes are journaled as errors — excluding them
+    # here breaks the echo chamber where each round re-reports its prior
+    # conclusions as fresh evidence (and snowballs the prompt)
+    errors = [e for e in project.journal.tail(20, kinds=[Kind.ERROR])
+              if e.actor != "triage"][-10:]
     if errors:
         parts.append("## Recent errors (some failures may be infrastructure, not the work)\n"
                      + "\n".join(f"- [{e.actor}] {shorten(str(e.payload.get('error', '')), 220)}"

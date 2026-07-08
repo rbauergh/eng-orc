@@ -99,6 +99,39 @@ def test_structured_answer_recovered_from_reasoning_channel():
     assert result.ok is True
 
 
+def test_second_budget_death_disables_thinking():
+    """Regression: budget growth alone lost — a thinking model spends a bigger
+    budget on longer rumination. The second length failure retries with
+    thinking off (deliberation belongs in the schema's reasoning field)."""
+    replies = iter([
+        ('{"reasoning": "cut', "", "length"),
+        ('{"reasoning": "cut again', "", "length"),
+        '{"reasoning": "terse", "ok": true}',
+    ])
+    client = FakeLLM(lambda *a: next(replies))
+    caller = StructuredCaller(client)
+    result = caller.call(RoleModel(model="m", thinking=True, max_output_tokens=1000),
+                         Verdict, [{"role": "user", "content": "judge"}])
+    assert result.ok is True
+    assert client.calls[0]["extra_body"] is None
+    assert client.calls[1]["extra_body"] is None  # first failure: budget only
+    override = client.calls[2]["extra_body"]
+    assert override["chat_template_kwargs"]["enable_thinking"] is False
+    assert client.calls[2]["max_tokens"] == 2250  # growth compounds too
+
+
+def test_prose_second_budget_death_disables_thinking():
+    from engorc.agents.runtime import one_shot_prose
+    from engorc.llm.budget import Section
+
+    replies = iter([("", "", "length"), ("", "", "length"), "# Design\ndone"])
+    client = FakeLLM(lambda *a: next(replies))
+    text, _ = one_shot_prose(client, RoleModel(model="m", thinking=True), "sys",
+                             [Section(name="B", text="b", priority=1)], max_tokens=1000)
+    assert text == "# Design\ndone"
+    assert client.calls[2]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
 def test_truncated_reply_grows_budget_then_recovers():
     """Regression: the planner hit its output budget mid-JSON ('Unterminated
     string starting at char 17') and every repair round retried with the SAME

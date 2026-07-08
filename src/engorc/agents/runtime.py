@@ -565,8 +565,15 @@ def one_shot_prose(
     ]
     effective_max = max_tokens or role_model.max_output_tokens
     usage = LLMUsage()
+    length_failures = 0
     for _ in range(retries + 1):
-        result = client.chat(role_model, messages, max_tokens=effective_max)
+        # second budget death → thinking off for the retry: longer budgets
+        # buy a thinking model longer rumination, not more document
+        override = ({"chat_template_kwargs": {"enable_thinking": False,
+                                              "reasoning_effort": "low"}}
+                    if length_failures >= 2 else None)
+        result = client.chat(role_model, messages, max_tokens=effective_max,
+                             extra_body=override)
         usage += result.usage
         text = result.text
         if not strip_thinking(text).strip() and result.reasoning.strip():
@@ -576,5 +583,6 @@ def one_shot_prose(
         if text.strip():
             return text.strip(), usage
         if result.finish_reason == "length":
+            length_failures += 1
             effective_max = int(effective_max * 1.5)
     return "", usage

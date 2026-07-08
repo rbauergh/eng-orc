@@ -86,6 +86,23 @@ def _triage_brain(payload: dict):
     return brain
 
 
+def test_triage_evidence_excludes_its_own_echo(config):
+    """Regression: triage's journaled systemic notes fed back into the next
+    triage's evidence — it kept re-reporting its own stale conclusions as
+    fresh problems, for days."""
+    from engorc.events import Kind
+    from engorc.orchestrator.phases import _triage_evidence
+
+    project = Registry(config).create("echo mission", title="E")
+    project.journal.append(Kind.ERROR, actor="reviewer",
+                           error="LLM server returned 500")  # ground truth
+    project.journal.append(Kind.ERROR, actor="triage",
+                           error="systemic: UTF-8 decode errors on binary files")
+    evidence = _triage_evidence(project, Plan(items=[]), [])
+    assert "LLM server returned 500" in evidence
+    assert "UTF-8 decode errors" not in evidence
+
+
 def test_triage_revise_feeds_new_direction(config):
     from engorc.llm.fake import FakeLLM
     from engorc.orchestrator.phases import _run_triage

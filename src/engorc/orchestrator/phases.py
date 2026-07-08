@@ -695,7 +695,14 @@ def _run_item_loop(
     config = services.config
     spec = role(role_name)
     if role_name == "implementer":
-        model_role = implementer_model_role(config, item.open_attempt_count())
+        # rotation is triggered by THIS role's failures only — a tester stuck
+        # on the same item says nothing about the coder's ability to implement
+        # (the item-wide budget in pick_item stays role-agnostic on purpose)
+        prior_failures = sum(
+            1 for a in item.attempts
+            if a.role == role_name and a.outcome in ("fail", "stuck", "error")
+        )
+        model_role = implementer_model_role(config, prior_failures)
         try:
             role_model = config.models.for_role(model_role)
         except KeyError:

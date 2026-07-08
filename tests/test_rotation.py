@@ -32,6 +32,29 @@ def test_policy_rotates_after_primary_attempts_and_clamps():
     assert order == ["coder", "coder", "a", "b", "b", "b"]
 
 
+def test_tester_failures_do_not_rotate_the_implementer(tmp_path):
+    """Regression: the rotation index counted failed attempts from ANY role,
+    so a tester stuck on the item pushed the implementer's very first attempt
+    onto the fallback family."""
+    config = _config_with_fallbacks(tmp_path, ["alt"])
+    finish = 'done\n\nACTION: finish {"status": "done"}\n```payload\nfirst try\n```\n'
+    client = FakeLLM(lambda *a: finish)
+    services = Services.build(config, client=client)
+    project = Registry(config).create("mission", title="M")
+
+    item = WorkItem(title="feature with a struggling tester")
+    for _ in range(2):  # the TESTER burned attempts, not the implementer
+        item.attempts.append(
+            AttemptRecord(role="tester", outcome="stuck", ended=iso_now(), model="coder")
+        )
+    plan = Plan(items=[item])
+    project.save_plan(plan)
+
+    attempt, result = _run_item_loop(services, project, plan, item, "implementer")
+    assert result.status == "done"
+    assert attempt.model == "coder"  # the implementer's own record is clean
+
+
 def test_stuck_item_attempt_runs_on_the_fallback_family(tmp_path):
     config = _config_with_fallbacks(tmp_path, ["alt"])
     finish = 'done\n\nACTION: finish {"status": "done"}\n```payload\nswitched families and fixed it\n```\n'

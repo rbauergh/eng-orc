@@ -185,7 +185,9 @@ def test_payload_in_json_args_is_salvaged_with_a_nudge(ctx, config):
     replies = iter([
         'testing\n\nACTION: run {"payload": "echo salvaged-ok"}\n',
         'writing\n\nACTION: write_file {"path": "t.py", "content": "print(1)"}\n',
-        'done\n\nACTION: finish {"status": "done"}\n```payload\nall good\n```\n',
+        # the exact shape that repeated three times in the wild: a perfect
+        # handoff, parked in an args key named after the tool's own docs
+        'done\n\nACTION: finish {"status": "done", "handoff": "all good, no changes needed"}\n',
     ])
 
     def brain(messages, response_format, role_model):

@@ -86,9 +86,10 @@ class FormatError(Exception):
 
 
 # args keys that models mistakenly use instead of the fenced payload block
+# (checked against every tool's legitimate args — no collisions)
 _PAYLOAD_ARG_KEYS = ("payload", "content", "contents", "file_content", "file_contents",
                      "new_content", "command", "cmd", "script", "code", "body", "text",
-                     "data", "source")
+                     "data", "source", "handoff", "note", "message", "summary", "report")
 
 
 @dataclass

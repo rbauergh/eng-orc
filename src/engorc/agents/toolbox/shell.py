@@ -141,9 +141,17 @@ def run_command(ctx: ToolContext, command: str, timeout: float) -> ToolResult:
     except subprocess.TimeoutExpired:
         return ToolResult(ok=False, output=f"timed out after {timeout:.0f}s: {command[:200]}")
     output = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+    # a bare exit code teaches nothing — an empty find/grep result must SAY
+    # it found nothing, or the model retries the same probe forever
+    if output.strip():
+        body = output.strip()
+    elif proc.returncode == 0:
+        body = "(no output — the command succeeded but printed nothing)"
+    else:
+        body = "(no output)"
     result = ToolResult(
         ok=proc.returncode == 0,
-        output=f"exit code {proc.returncode}\n{output.strip()}" if output.strip() else f"exit code {proc.returncode}",
+        output=f"exit code {proc.returncode}\n{body}",
         data={"exit_code": proc.returncode},
     )
     return result

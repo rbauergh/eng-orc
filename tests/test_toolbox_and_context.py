@@ -49,6 +49,17 @@ def test_binary_workroom_content_never_crashes_decoding(ctx):
     assert result.ok and "exit code 0" in result.output
 
 
+def test_silent_success_says_so(ctx):
+    """Regression: a find over a nonexistent path exits 0 with nothing — the
+    bare 'exit code 0' observation taught the model nothing and it retried
+    the same probe until the repeat detector killed the attempt."""
+    from engorc.agents.toolbox.shell import run_command
+
+    result = run_command(ctx, "true", timeout=10)
+    assert result.ok
+    assert "no output — the command succeeded but printed nothing" in result.output
+
+
 def test_ensure_repo_seeds_gitignore_and_untracks_junk(tmp_path):
     """Regression: no .gitignore meant `git add -A` committed the project
     venv; a reviewer flagged '.venv in the repository' as an ARCHITECTURE

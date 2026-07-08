@@ -67,6 +67,9 @@ Rules:
 - Args are a small one-line JSON object of scalars. File contents, patches,
   and shell commands go in the fenced payload as plain text — NEVER inside JSON.
 - Each command runs fresh (no shell state persists); chain with && if needed.
+- Every command already runs AT THE PROJECT ROOT. Use relative paths
+  ("connect4/renderer.py", "./test_x.py"). Never cd to or search absolute
+  paths you have not seen in an observation — they do not exist here.
 - Observations are truncated; ask for specific files/lines rather than dumps.
 - In long sessions your earliest turns may be replaced by a summary labeled
   "Progress so far". Details absent from it are gone — re-read files rather

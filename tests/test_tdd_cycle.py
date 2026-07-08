@@ -81,6 +81,93 @@ def test_weak_tests_are_rejected_with_findings(tmp_path):
     assert any("test-review[tests]" in n and "encodes no behavior" in n for n in item.notes)
 
 
+def test_red_check_executes_the_suite_mechanically(tmp_path):
+    """TDD's core fact is executed, not asserted: red suites report red,
+    green suites report green, no suite reports nothing."""
+    from engorc.orchestrator.phases import _red_check
+    from engorc.plan import WorkItem as WI
+
+    config, project, item, _ = _tester_setup(tmp_path)  # test_thing.py asserts False
+    services = _services_with_verdict(config, "approve", [])
+    all_green, execution = _red_check(services, project, item)
+    assert all_green is False
+    assert "test_thing" in execution or "FAIL" in execution
+
+    (project.workroom / "test_thing.py").write_text("def test_behavior():\n    assert True\n")
+    all_green, _ = _red_check(services, project, item)
+    assert all_green is True
+
+    bare = _tester_setup(tmp_path / "second")[1]
+    (bare.workroom / "test_thing.py").unlink()
+    assert _red_check(services, bare, WI(title="x")) == (None, "")
+
+
+def test_execution_evidence_reaches_the_test_reviewer(tmp_path):
+    """The reviewer judges red/green MEANING; the harness supplies the fact."""
+    import json as _json
+
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.services import Services
+
+    config, project, item, attempt = _tester_setup(tmp_path)
+    seen: list[str] = []
+
+    def brain(messages, response_format, role_model):
+        seen.append(messages[-1]["content"])
+        return _json.dumps({"reasoning": "judged", "findings": [],
+                            "verdict": "approve", "summary": "ok"})
+
+    services = Services.build(config, client=FakeLLM(brain))
+    note = review_tests(services, project, item, attempt, sha_before="",
+                        execution_summary="TEST EXECUTION AFTER THE TESTER FINISHED: RED — 3 failed")
+    assert note is None
+    assert any("TEST EXECUTION AFTER THE TESTER FINISHED: RED" in c for c in seen)
+
+
+def test_no_new_tests_is_exempt_from_the_red_check(tmp_path):
+    """A tester that validly wrote nothing (the suite already covers the
+    item) must NOT get the 'green = possibly vacuous' treatment — green is
+    simply expected there."""
+    import json as _json
+
+    from engorc.config import Config, IndexConfig, MemoryConfig, RunConfig
+    from engorc.llm.fake import FakeLLM
+    from engorc.orchestrator.phases import phase_build
+    from engorc.orchestrator.services import Services
+    from engorc.plan import Plan
+    from engorc.registry import Registry
+
+    config = Config(home=tmp_path / "home", memory=MemoryConfig(backend="local"),
+                    index=IndexConfig(enabled=False),
+                    run=RunConfig(project_venvs=False, review_tests=True))
+    project = Registry(config).create("covered mission", title="C")
+    from engorc.agents.toolbox.git import commit_all, ensure_repo
+
+    ensure_repo(project.workroom)
+    (project.workroom / "test_ok.py").write_text("def test_ok():\n    assert True\n")
+    commit_all(project.workroom, "feat: suite in place")
+
+    item = WorkItem(title="already covered thing", notes=["test_first"])
+    project.save_plan(Plan(items=[item]))
+
+    def brain(messages, response_format, role_model):
+        name = (response_format or {}).get("json_schema", {}).get("name", "")
+        if name:
+            return _json.dumps({"reasoning": "n/a", "findings": [],
+                                "verdict": "approve", "summary": "ok"})
+        return ('done\n\nACTION: finish {"status": "done"}\n'
+                "```payload\nsuite already covers this item\n```\n")
+
+    services = Services.build(config, client=FakeLLM(brain))
+    note = phase_build(services, project)
+    assert "existing tests already cover" in note
+    refreshed = project.load_plan().get(item.id)
+    tester_attempt = refreshed.attempts[-1]
+    assert tester_attempt.test_summary == ""  # no red/green framing applied
+    red_checks = list(project.journal.iter_events(kinds=["verify_run"]))
+    assert not red_checks  # the suite was not executed as a red check
+
+
 def test_no_changes_with_an_existing_suite_is_accepted(tmp_path):
     """Regression: the tester correctly reported 'the suite already covers
     this item' (as its prompt instructs) and the gate failed it for producing

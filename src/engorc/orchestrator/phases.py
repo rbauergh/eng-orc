@@ -1017,6 +1017,23 @@ def _tests_seat(config) -> PanelReviewer:
     return PanelReviewer(model_role="coder", lens="tests")
 
 
+def _red_check(services: Services, project: Project, item: WorkItem) -> tuple[bool | None, str]:
+    """Execute the suite the moment the tester finishes: TDD expects RED here.
+    Returns (all_green, execution tail) — or (None, '') when no test command
+    exists. The red/green FACT is mechanical; what it means is the
+    test-reviewer's judgment."""
+    from ..agents.toolbox.testing import detect_test_command
+
+    command = detect_test_command(project.workroom)
+    if not command:
+        return None, ""
+    ctx = ToolContext(project=project, config=services.config, journal=project.journal,
+                      item_id=item.id, role="verifier")
+    report = run_verification(ctx, [command])
+    return report.passed, truncate_middle(
+        report.summary() + "\n" + report.failure_detail(), 1500)
+
+
 def _test_files_exist(workroom) -> bool:
     if (workroom / "tests").is_dir():
         return True
@@ -1028,7 +1045,8 @@ def _test_files_exist(workroom) -> bool:
 
 
 def review_tests(
-    services: Services, project: Project, item: WorkItem, attempt: AttemptRecord, sha_before: str
+    services: Services, project: Project, item: WorkItem, attempt: AttemptRecord,
+    sha_before: str, execution_summary: str = ""
 ) -> str | None:
     """The TDD gate: the tester's behavioral tests get their own review before
     any implementation is built to them. Returns a step note when the tests
@@ -1051,6 +1069,7 @@ def review_tests(
     outcome = _review_one_seat(
         services, project, item, diff, seat,
         artifact_name=f"review-tests-{seat.lens}.md", stage="tests",
+        verify_summary=execution_summary,
     )
     if outcome is None:
         return None  # reviewer unavailable — never wedge the pipeline on the gate
@@ -1217,14 +1236,46 @@ def phase_build(services: Services, project: Project) -> str:
 
     if role_name == "tester":
         gate_note = None
+        execution_summary = ""
+        wrote_tests = (attempt.outcome == "success"
+                       and bool(diff_since(project.workroom, sha_before).strip()))
+        if wrote_tests:
+            # TDD's core fact is MECHANICAL: run the suite the tester just
+            # left behind. Red is the expected outcome; green means either
+            # the behavior already exists or the tests are vacuous — which
+            # of those it is becomes the test-reviewer's explicit question.
+            # (A tester that validly wrote NOTHING — the suite already covers
+            # the item — is exempt: green is simply expected there.)
+            all_green, execution = _red_check(services, project, item)
+            if all_green is not None:
+                project.journal.append(Kind.VERIFY_RUN, item=item.id, passed=all_green,
+                                       summary=shorten(execution, 300))
+                if all_green:
+                    execution_summary = (
+                        "TEST EXECUTION AFTER THE TESTER FINISHED: GREEN — every test "
+                        "passes with NO implementation for this item. Either the behavior "
+                        "already exists (approve) or the tests are vacuous and encode "
+                        "nothing (block with TEST_GAP). Decide which.\n" + execution
+                    )
+                    log.warn(f"tester's suite is GREEN before implementation on "
+                             f"'{shorten(item.title, 40)}' — review decides if that's legitimate")
+                else:
+                    execution_summary = (
+                        "TEST EXECUTION AFTER THE TESTER FINISHED: RED — failing, as TDD "
+                        "expects. Judge whether they fail for the RIGHT reason (the missing "
+                        "behavior) rather than broken test code.\n" + execution
+                    )
+                attempt.test_summary = truncate_middle(execution_summary, 2000)
         if attempt.outcome == "success" and config.run.review_required and config.run.review_tests:
-            gate_note = review_tests(services, project, item, attempt, sha_before)
+            gate_note = review_tests(services, project, item, attempt, sha_before,
+                                     execution_summary=execution_summary)
         plan.set_status(item.id, "todo")
         project.save_plan(plan)
         if gate_note:
             return gate_note
         if attempt.outcome == "success":
-            return f"tests written and reviewed for '{shorten(item.title, 50)}'; implementation is next"
+            readiness = "tests written and reviewed" if wrote_tests else "existing tests already cover"
+            return f"{readiness} for '{shorten(item.title, 50)}'; implementation is next"
         return f"tester {attempt.outcome} on '{shorten(item.title, 50)}'"
 
     if result.status != "done":

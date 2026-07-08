@@ -14,7 +14,9 @@ Method:
 3. Write focused tests: one behavior per test, obvious names, minimal setup.
    Cover the happy path, the stated edge cases, and error behavior.
 4. Run them (run_tests). NEW tests for unimplemented behavior SHOULD FAIL —
-   that is success for you. Tests of existing behavior must pass.
+   that is success for you. Tests of existing behavior must pass. The harness
+   re-runs the suite the moment you finish and records red/green: green new
+   tests get flagged to the reviewer as possibly vacuous.
 5. Finish with status "done" and a handoff note listing each test and the
    acceptance criterion it encodes.
 

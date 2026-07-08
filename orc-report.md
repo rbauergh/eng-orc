@@ -1,5 +1,5 @@
 # orc diagnostics report
-_generated 2026-07-08T22:00:43+00:00 · eng-orc 0.1.0 (commit 2905f07) · python 3.12.3 · Linux-5.15.133.1-microsoft-standard-WSL2-x86_64-with-glibc2.39_
+_generated 2026-07-08T23:06:49+00:00 · eng-orc 0.1.0 (commit d963e68) · python 3.12.3 · Linux-5.15.133.1-microsoft-standard-WSL2-x86_64-with-glibc2.39_
 
 ## Environment checks
 - [ok] home writable — /home/rbauer/.eng-orc
@@ -193,20 +193,21 @@ log_level: info
 
 ## GPU
 - resident: jina-embed (ready)
-  slots: [{"id": 0, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 8192, "speculative": false, "is_processing": false, "id_task": 22449, "n_prompt_tokens": 1, "n_prompt_tokens_processed": 1, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 40, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": -1, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": -1, "n_predict": -1, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "Content-only", "reasoning_format": "none", "reasoning_in_content": false, "generation_prompt": "", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": true, "has_new_line": false, "n_remain": -1, "n_deco
-- resident: qwen3.6-35b (loading)
-- 21:53:56 qwen3.6-35b loaded in 28s
-- 21:55:05 qwen3.6-35b loading …
-- 21:55:31 qwen3.6-35b loaded in 26s
-- 21:56:40 qwen3.6-35b loading …
-- 21:57:09 qwen3.6-35b loaded in 29s
-- 21:59:01 qwen3.6-35b loading …
-- 21:59:27 qwen3.6-35b loaded in 26s
-- 22:00:36 qwen3.6-35b loading …
+  slots: [{"id": 0, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 8192, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 8192, "speculative": false, "is_processing": false, "id_task": 23628, "n_prompt_tokens": 1, "n_prompt_tokens_processed": 1, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.800000011920929, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 40, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": -1, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": -1, "n_predict": -1, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "Content-only", "reasoning_format": "none", "reasoning_in_content": false, "generation_prompt": "", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_next_token": true, "has_new_line": false, "n_remain": -1, "n_deco
+- resident: qwen3.6-35b (ready)
+  slots: [{"id": 0, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 1, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 2, "n_ctx": 49152, "speculative": false, "is_processing": false}, {"id": 3, "n_ctx": 49152, "speculative": false, "is_processing": true, "id_task": 0, "n_prompt_tokens": 10993, "n_prompt_tokens_processed": 10993, "n_prompt_tokens_cache": 0, "params": {"seed": 4294967295, "temperature": 0.6000000238418579, "dynatemp_range": 0.0, "dynatemp_exponent": 1.0, "top_k": 20, "top_p": 0.949999988079071, "min_p": 0.05000000074505806, "top_n_sigma": -1.0, "xtc_probability": 0.0, "xtc_threshold": 0.10000000149011612, "typical_p": 1.0, "repeat_last_n": 64, "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0, "dry_multiplier": 0.0, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": 49152, "mirostat": 0, "mirostat_tau": 5.0, "mirostat_eta": 0.10000000149011612, "max_tokens": 3072, "n_predict": 3072, "n_keep": 0, "n_discard": 0, "ignore_eos": false, "stream": false, "n_probs": 0, "min_keep": 0, "chat_format": "peg-native", "reasoning_format": "deepseek", "reasoning_in_content": false, "generation_prompt": "<|im_start|>assistant\n<think>\n\n</think>\n\n", "samplers": ["penalties", "dry", "top_n_sigma", "top_k", "typ_p", "top_p", "min_p", "xtc", "temperature"], "speculative.types": "none", "timings_per_token": false, "post_sampling_probs": false, "backend_sampling": false, "lora": []}, "next_token": [{"has_ne
+- 23:01:40 qwen3.6-35b loading …
+- 23:02:11 qwen3.6-35b loaded in 31s
+- 23:03:49 qwen3.6-35b loading …
+- 23:04:18 qwen3.6-35b loaded in 29s
+- 23:05:45 qwen3.6-35b unloaded after 1m27s
+- 23:06:03 qwen3.5-4b unloaded after 18s
+- 23:06:03 qwen3.6-35b loading …
+- 23:06:14 qwen3.6-35b loaded in 11s
 
 ## Projects
 ### connect-4-game
-phase build · state active (new request queued) · plan 16/22 · open gates 0
+phase build · state active (new request queued) · plan 17/22 · open gates 0
 
 | item | title | status | attempts | triaged | deps |
 | --- | --- | --- | --- | --- | --- |
@@ -225,19 +226,74 @@ phase build · state active (new request queued) · plan 16/22 · open gates 0
 | wr4xa6 | Fix renderer.py to use module-level pygame.draw A… | done | 2 | 1 | r43zvt |
 | p2v98q | Initialize High-DPI Environment & Pygame Subsyste… | done | 1 | 0 | — |
 | 42n2a3 | Implement Core Board State & Rule Engine | done | 2 | 0 | — |
-| 1j0csa | Develop Minimax AI with Alpha-Beta Pruning | todo | 0 | 0 | — |
+| 1j0csa | Develop Minimax AI with Alpha-Beta Pruning | in_progress | 4 | 0 | — |
 | max52v | Build Input Manager & Coordinate Mapping | done | 4 | 0 | p2v98q |
-| 1n7nwm | Create Renderer with Animation Pipeline | in_progress | 3 | 0 | p2v98q, 42n2a3 |
-| apn8cq | Integrate Audio System | todo | 0 | 0 | p2v98q |
+| 1n7nwm | Create Renderer with Animation Pipeline | todo | 3 | 0 | p2v98q, 42n2a3 |
+| apn8cq | Integrate Audio System | done | 2 | 0 | p2v98q |
 | hjkds9 | Construct Main Loop & State Machine | todo | 0 | 0 | 42n2a3, 1j0csa, max52v, 1n7nwm, apn8cq |
 | a488fr | Generate Build Configuration and Assets | todo | 0 | 0 | hjkds9 |
 | 74tx1x | Build Executable and Verify Performance | todo | 0 | 0 | a488fr |
 
-#### problem item 1n7nwm: Create Renderer with Animation Pipeline (in_progress)
+#### problem item 1j0csa: Develop Minimax AI with Alpha-Beta Pruning (in_progress)
+acceptance: compute_move(board, difficulty) returns a valid column index within 1s for Hard depth; Heuristic weights scale linearly with difficulty tier in config/settings.py; get_valid_moves(board) filters out full columns efficiently; Unit tests verify depth limits, valid move generation, and score bounds
+- attempt [tester/coder] success: All acceptance criteria for the Minimax AI item are already fully tested: 1. **compute_move returns valid column index** — `TestComputeMoveReturnsValidColumn` (5 tests): integer return, column in [0,6), non-full column, single available co…
+- attempt [implementer/coder] stuck: repeated the same action three times: finish — last observation: finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
+- attempt [implementer/coder] None: 
+- note: test_first
+- note: request: # Connect 4 Game: Build Specification
+- note: plan-review[deep-reasoner]: wi_1kwz2tjre4kqxdhwd: ambiguous file location for gl_set_attribute → require it in ui/__init__.py and verify its presence
+- note: plan-review[deep-reasoner]: wi_1kwz2tjrggpqkbn34: win line overlay not verified → add test confirming overlay drawing
+- note: test-review[tests] TEST_GAP/blocker: Test suite lacks a direct unit test for get_valid_moves(board). The AC explicitly requires this function to be tested for its filtering logic, but the tests only verify it indirectly via compute_move. → Add a test class (e…
+- note: test-review[tests] TEST_GAP/blocker: TestDepthLimits does not verify the 1-second runtime constraint for Hard difficulty specified in the AC. → Add a test that asserts compute_move(b, 'hard') completes within a 1-second timeout (using time.perf_counter or a m…
+- note: tester: the existing test suite already covers this item
+- note: salvage from the last implementer attempt: [assistant] Let me read the settings file to check the heuristic weights and difficulty depths: ACTION: read_file {"path": "connect4/config/settings.py"} [result] connect4/config/settings.py lines 1-55 of 55 1| """Ce…
+
+latest attempt transcript (tail):
+```
+…[10094 chars elided]…
+stGetValidMoves).
+- **Depth limits, valid moves, score bounds**: Covered by TestDifficultyDepths, TestDepthLimits, TestGetValidMoves, and TestScoreBounds (31 tests total, all passing).
+
+No changes were needed - the prior implementer's work is complete. The verify command `python -m pytest test_minimax.py -v` exits 0 with all 31 tests passing.
+```
+### Observation
+FORMAT ERROR: no ACTION line found. Reply with exactly one line like: ACTION: tool_name {"arg": "value"} (plus a fenced payload when needed).
+
+## Turn 8
+### Model
+ACTION: finish {"status": "done", "handoff": "All 31 tests in test_minimax.py pass. The existing implementation in connect4/ai/minimax.py and config/settings.py already satisfy every acceptance criterion. No changes were needed."}
+### Observation
+finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
+
+## Turn 9
+### Model
+ACTION: finish {"status": "done", "handoff": "All 31 tests in test_minimax.py pass. The existing implementation in connect4/ai/minimax.py and config/settings.py already satisfy every acceptance criterion. No changes were needed."}
+### Observation
+finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
+
+NOTE: you repeated the exact same action. If it did not work before, it will not work now — change your approach.
+
+## Turn 10
+### Model
+{
+  "status": "done",
+  "handoff": "All 31 tests in test_minimax.py pass. The existing implementation in connect4/ai/minimax.py and config/settings.py already satisfy every acceptance criterion. No changes were needed."
+}
+### Observation
+FORMAT ERROR: no ACTION line found. Reply with exactly one line like: ACTION: tool_name {"arg": "value"} (plus a fenced payload when needed).
+
+## Turn 11
+### Model
+ACTION: finish {"status": "done", "handoff": "All 31 tests in test_minimax.py pass. The existing implementation in connect4/ai/minimax.py and config/settings.py already satisfy every acceptance criterion. No changes were needed."}
+### Observation
+finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
+```
+
+#### problem item 1n7nwm: Create Renderer with Animation Pipeline (todo)
 acceptance: draw_menu() and draw_game_state() render correctly on the Pygame surface; Falling piece animation interpolates row position smoothly; Win-line overlay highlights winning cells with distinct color/shape; Unit tests verify rendering output matches expected pixel patterns or surface states
 - attempt [tester/coder] stuck: stalled: no file changes or new command results in the last 10 turns — last observation: test_renderer.py lines 240-359 of 440
 - attempt [tester/coder] stuck: stalled: no file changes or new command results in the last 10 turns — last observation: test_renderer.py lines 241-360 of 448
-- attempt [tester/coder] None: 
+- attempt [tester/coder] stuck: stalled: no file changes or new command results in the last 10 turns — last observation: test_renderer.py lines 241-360 of 448
 - note: test_first
 - note: request: # Connect 4 Game: Build Specification
 - note: plan-review[deep-reasoner]: wi_1kwz2tjre4kqxdhwd: ambiguous file location for gl_set_attribute → require it in ui/__init__.py and verify its presence
@@ -245,7 +301,7 @@ acceptance: draw_menu() and draw_game_state() render correctly on the Pygame sur
 
 latest attempt transcript (tail):
 ```
-…[22855 chars elided]…
+…[21871 chars elided]…
 ace(board)
 312| 
 313|         rect_calls = mock_draw.rect.call_args_list
@@ -317,9 +373,8 @@ recent errors:
 - [07-08T20:17] [scout] request investigation stuck: repeated the same action three times: finish — last observation: finish needs a handoff note in the fenced payload: what you did, the state of the work, anything the next person must know.
 
 recent activity:
-- [07-08T21:57] attempt on wi_1kx1pd9hmgs1n7nwm: stuck — stalled: no file changes or new command results in the last 10 turns — last observation: test_renderer.py lines 241-360 of 448
-- [07-08T21:58] commit 09ae192: checkpoint: carry-over from earlier attempts
-- [07-08T21:58] attempt started by tester on wi_1kx1pd9hmgs1n7nwm
+- [07-08T23:03] attempt on wi_1kx1pd9hmrm1j0csa: stuck — repeated the same action three times: finish — last observation: finish needs a handoff note in the fenced payload: what you did, the state…
+- [07-08T23:03] attempt started by implementer on wi_1kx1pd9hmrm1j0csa
 
 ### hello-world-script
 phase done · state done (mission wrapped) · plan 1/1 · open gates 0
@@ -390,7 +445,7 @@ recent activity:
 
 ## llama-swap service log (tail)
 ```
-Jul 08 15:00:02 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 656.86µs Jul 08 15:00:02 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 1.721344ms Jul 08 15:00:02 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1435 "python-httpx/0.28.1" 184.050717ms Jul 08 15:00:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 1.15617ms Jul 08 15:00:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 59.794µs Jul 08 15:00:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 2.250757ms Jul 08 15:00:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1439 "python-httpx/0.28.1" 8.626332ms Jul 08 15:00:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 45.286µs Jul 08 15:00:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "POST /v1/chat/completions HTTP/1.1" 200 894 "python-httpx/0.28.1" 1m7.491251183s Jul 08 15:00:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 73.109µs Jul 08 15:00:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 800.328µs Jul 08 15:00:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1442 "python-httpx/0.28.1" 973.862µs Jul 08 15:00:09 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 326.831µs Jul 08 15:00:10 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 36.59µs Jul 08 15:00:10 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 2.35492ms Jul 08 15:00:10 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1444 "python-httpx/0.28.1" 114.581219ms Jul 08 15:00:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 71.276µs Jul 08 15:00:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 74.742µs Jul 08 15:00:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 4.33379ms Jul 08 15:00:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1442 "python-httpx/0.28.1" 11.13465ms Jul 08 15:00:13 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "POST /v1/chat/completions HTTP/1.1" 200 939 "python-httpx/0.28.1" 6.244850223s Jul 08 15:00:15 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 71.987µs Jul 08 15:00:15 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 50.997µs Jul 08 15:00:15 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 1.651899ms Jul 08 15:00:16 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1446 "python-httpx/0.28.1" 1.325035257s Jul 08 15:00:18 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "POST /v1/chat/completions HTTP/1.1" 200 765 "python-httpx/0.28.1" 4.089922058s Jul 08 15:00:18 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 41.96µs Jul 08 15:00:18 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 40.156µs Jul 08 15:00:18 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 1.389076ms Jul 08 15:00:20 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 15:00:20 http: proxy error: dial tcp 127.0.0.1:5804: connect: connection refused Jul 08 15:00:21 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 15:00:21 http: proxy error: dial tcp 127.0.0.1:5804: connect: connection refused Jul 08 15:00:29 BATTLESTATION-REN llama-swap[1482650]: [INFO] <qwen3.5-4b> Health check passed on http://localhost:5804/health Jul 08 15:00:33 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 0 "python-httpx/0.28.1" 15.001404194s Jul 08 15:00:35 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "POST /v1/chat/completions HTTP/1.1" 200 3098 "python-httpx/0.28.1" 17.191776524s Jul 08 15:00:36 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 68.36µs Jul 08 15:00:36 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 15:00:36 http: proxy error: dial tcp 127.0.0.1:5805: connect: connection refused Jul 08 15:00:36 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 51.268µs Jul 08 15:00:36 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 4.40675ms Jul 08 15:00:38 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 285.523µs Jul 08 …
+Jul 08 16:05:28 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 618.266µs Jul 08 16:05:29 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 16:05:29 http: proxy error: dial tcp 127.0.0.1:5804: connect: connection refused Jul 08 16:05:30 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 16:05:30 http: proxy error: dial tcp 127.0.0.1:5804: connect: connection refused Jul 08 16:05:38 BATTLESTATION-REN llama-swap[1482650]: [INFO] <qwen3.5-4b> Health check passed on http://localhost:5804/health Jul 08 16:05:43 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 0 "python-httpx/0.28.1" 15.014426927s Jul 08 16:05:45 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 83.138µs Jul 08 16:05:45 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "POST /v1/chat/completions HTTP/1.1" 200 2959 "python-httpx/0.28.1" 18.309194188s Jul 08 16:05:45 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 707 "python-httpx/0.28.1" 59.473µs Jul 08 16:05:45 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 4.604615ms Jul 08 16:05:46 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 16:05:46 http: proxy error: dial tcp 127.0.0.1:5805: connect: connection refused Jul 08 16:06:00 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.5-4b/slots HTTP/1.1" 200 0 "python-httpx/0.28.1" 15.01527599s Jul 08 16:06:02 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 7.570677ms Jul 08 16:06:03 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 2.079116ms Jul 08 16:06:03 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 8.991699ms Jul 08 16:06:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 292.067µs Jul 08 16:06:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 59.062µs Jul 08 16:06:05 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 918.888µs Jul 08 16:06:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 65.354µs Jul 08 16:06:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 45.978µs Jul 08 16:06:07 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 790.083µs Jul 08 16:06:10 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 405.278µs Jul 08 16:06:10 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 42.692µs Jul 08 16:06:10 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 2.332964ms Jul 08 16:06:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 309.931µs Jul 08 16:06:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 770 "python-httpx/0.28.1" 39.916µs Jul 08 16:06:12 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 5.64694ms Jul 08 16:06:14 BATTLESTATION-REN llama-swap[1482650]: [INFO] <qwen3.6-35b> Health check passed on http://localhost:5805/health Jul 08 16:06:14 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 259.814µs Jul 08 16:06:14 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 40.006µs Jul 08 16:06:14 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 4.900495ms Jul 08 16:06:29 BATTLESTATION-REN llama-swap[1482650]: 2026/07/08 16:06:29 http: proxy error: context canceled Jul 08 16:06:29 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 502 0 "python-httpx/0.28.1" 15.035608106s Jul 08 16:06:32 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 3.703548ms Jul 08 16:06:32 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 1.020047ms Jul 08 16:06:32 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 7.642374ms Jul 08 16:06:36 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.1" 200 1435 "python-httpx/0.28.1" 4.014642924s Jul 08 16:06:38 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /v1/models HTTP/1.1" 200 1562 "python-httpx/0.28.1" 181.155µs Jul 08 16:06:38 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /running HTTP/1.1" 200 767 "python-httpx/0.28.1" 35.657µs Jul 08 16:06:38 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/jina-embed/slots HTTP/1.1" 200 1374 "python-httpx/0.28.1" 9.949003ms Jul 08 16:06:40 BATTLESTATION-REN llama-swap[1482650]: [INFO] Request 127.0.0.1 "GET /upstream/qwen3.6-35b/slots HTTP/1.…
 ```
 
 _This report is generated by `orc bugreport` and is safe to share: config

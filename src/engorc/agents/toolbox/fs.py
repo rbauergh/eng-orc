@@ -53,7 +53,11 @@ def write_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     rel = str(args.get("path", ""))
     path = ctx.jail(rel)
     if not payload:
-        return ToolResult(ok=False, output="write_file needs the file content in the fenced payload")
+        return ToolResult(ok=False, output=(
+            "write_file needs the file content in the fenced payload block, exactly like:\n"
+            'ACTION: write_file {"path": "' + (rel or "path/to/file.py") + '"}\n'
+            "```payload\n<the complete file content>\n```"
+        ))
     error = _syntax_gate(rel, payload)
     if error:
         return ToolResult(ok=False, output=error)

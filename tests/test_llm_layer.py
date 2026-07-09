@@ -197,6 +197,40 @@ def test_prose_truncated_rumination_is_not_the_answer():
     assert client.calls[1]["max_tokens"] == 600  # the length failure grew the budget
 
 
+def test_prose_partial_answer_on_truncation_retries_to_completion():
+    """Regression: a gate-chat reply arrived cut off halfway through its
+    second sentence — a truncated reply with SOME visible text returned
+    immediately, skipping the budget-growth retry that empty truncations
+    already got."""
+    from engorc.agents.runtime import one_shot_prose
+    from engorc.llm.budget import Section
+
+    replies = iter([
+        ("<think>weighing options</think>Use the staging bucket. Then conf",
+         "", "length"),
+        "Use the staging bucket. Then configure the CDN to point at it.",
+    ])
+    client = FakeLLM(lambda *a: next(replies))
+    text, _ = one_shot_prose(client, RoleModel(model="m", thinking=True), "sys",
+                             [Section(name="B", text="b", priority=1)], max_tokens=1200)
+    assert text == "Use the staging bucket. Then configure the CDN to point at it."
+    assert client.calls[1]["max_tokens"] == 1800
+
+
+def test_prose_exhausted_retries_return_the_longest_partial_marked():
+    """When every attempt truncates, the longest partial comes back with an
+    explicit marker instead of posing as a complete answer."""
+    from engorc.agents.runtime import one_shot_prose
+    from engorc.llm.budget import Section
+
+    client = FakeLLM(lambda *a: ("Half an ans", "", "length"))
+    text, _ = one_shot_prose(client, RoleModel(model="m"), "sys",
+                             [Section(name="B", text="b", priority=1)], retries=1)
+    assert text.startswith("Half an ans")
+    assert "cut off by the output token budget" in text
+    assert len(client.calls) == 2  # it did retry before settling for the partial
+
+
 def test_tool_loop_reply_recovered_from_reasoning_channel():
     from engorc.agents.runtime import parse_action
     from engorc.llm.structured import strip_thinking

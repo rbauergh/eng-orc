@@ -586,9 +586,11 @@ def one_shot_prose(
     retries: int = 2,
 ) -> tuple[str, LLMUsage]:
     """One freeform document call with the same self-healing the structured
-    path has: an answer stranded in the reasoning channel is recovered, and a
-    reply whose thinking ate the whole output budget is retried with a grown
-    budget instead of surfacing as an empty document."""
+    path has: an answer stranded in the reasoning channel is recovered, and
+    any length-truncated reply — empty OR cut off mid-answer — is retried
+    with a grown budget. If every attempt truncates, the longest partial is
+    returned with an explicit truncation marker rather than posing as a
+    complete answer."""
     packer = ContextPacker(
         context_window=role_model.context_window,
         reserve_output=max_tokens or role_model.max_output_tokens,
@@ -601,6 +603,7 @@ def one_shot_prose(
     effective_max = max_tokens or role_model.max_output_tokens
     usage = LLMUsage()
     length_failures = 0
+    best_partial = ""
     for _ in range(retries + 1):
         # second budget death → thinking off for the retry: longer budgets
         # buy a thinking model longer rumination, not more document
@@ -622,9 +625,16 @@ def one_shot_prose(
             text = result.reasoning
         if role_model.thinking:
             text = strip_thinking(text)
-        if text.strip():
-            return text.strip(), usage
+        text = text.strip()
+        if text and not truncated:
+            return text, usage
         if truncated:
+            # a reply cut off mid-answer is not the answer: keep the longest
+            # partial as a last resort and retry with room to finish
+            if len(text) > len(best_partial):
+                best_partial = text
             length_failures += 1
             effective_max = int(effective_max * 1.5)
+    if best_partial:
+        return best_partial + "\n\n…(cut off by the output token budget)", usage
     return "", usage

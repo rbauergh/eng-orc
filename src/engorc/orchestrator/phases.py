@@ -985,11 +985,14 @@ def _review_one_seat(
         system += (
             "\n## Stage note\nYou are reviewing ONLY the tests, before this item's "
             "implementation exists. Judge them against the ACCEPTANCE CRITERIA alone: "
-            "failing now is expected and correct; weak assertions, permutation spam, or "
-            "tests that mirror a guessed implementation instead of the required behavior "
-            "are blockers. Any implementation code visible in your context belongs to "
-            "OTHER items — it is not the specification and tests must not be judged "
-            "against it."
+            "failing now is expected and correct — NEVER file a finding merely because "
+            "tests fail; red on unimplemented behavior is the tester doing their job. "
+            "File a blocker only when you can NAME the defect: broken test code (wrong "
+            "API in an assertion, bad index or fixture — cite the test and the flaw), "
+            "weak assertions, permutation spam, tests that mirror a guessed "
+            "implementation, or a criterion with no test at all. Say explicitly WHICH "
+            "kind your finding is. Any implementation code visible in your context "
+            "belongs to OTHER items — it is not the specification."
         )
     log.agent(actor, f"reviewing {'tests for ' if stage == 'tests' else ''}"
                      f"'{shorten(item.title, 50)}' on {role_model.model} …")
@@ -1072,11 +1075,24 @@ def _tests_seat(config) -> PanelReviewer:
     return PanelReviewer(model_role="coder", lens="tests")
 
 
+def _failing_test_names(detail: str, cap: int = 15) -> list[str]:
+    names = []
+    for line in detail.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("FAILED ", "ERROR ")):
+            names.append(shorten(stripped, 140))
+            if len(names) >= cap:
+                names.append("… (more failures elided)")
+                break
+    return names
+
+
 def _red_check(services: Services, project: Project, item: WorkItem) -> tuple[bool | None, str]:
     """Execute the suite the moment the tester finishes: TDD expects RED here.
     Returns (all_green, execution tail) — or (None, '') when no test command
     exists. The red/green FACT is mechanical; what it means is the
-    test-reviewer's judgment."""
+    test-reviewer's judgment — so the evidence names WHICH tests fail, not
+    just how many."""
     from ..agents.toolbox.testing import detect_test_command
 
     command = detect_test_command(project.workroom)
@@ -1085,8 +1101,12 @@ def _red_check(services: Services, project: Project, item: WorkItem) -> tuple[bo
     ctx = ToolContext(project=project, config=services.config, journal=project.journal,
                       item_id=item.id, role="verifier")
     report = run_verification(ctx, [command])
-    return report.passed, truncate_middle(
-        report.summary() + "\n" + report.failure_detail(), 1500)
+    detail = report.failure_detail()
+    summary = report.summary()
+    names = _failing_test_names(detail)
+    if names:
+        summary += "\nFailing tests:\n" + "\n".join(names)
+    return report.passed, truncate_middle(summary + "\n" + detail, 2000)
 
 
 def _test_files_exist(workroom) -> bool:
@@ -1178,6 +1198,14 @@ def _integrate_item(services: Services, project: Project, plan: Plan, item: Work
     plan.set_status(item.id, "done")
     project.save_plan(plan)
     project.journal.append(Kind.ITEM_STATUS, item=item.id, status="done")
+    # a completed item answers its own open questions — a stuck-gate left in
+    # the inbox after recovery is a zombie that wastes the user's attention
+    for gate in project.gates.open_gates():
+        if gate.item == item.id:
+            project.gates.dismiss(gate.id)
+            project.journal.append(Kind.GATE_ANSWERED, actor="system",
+                                   question=gate.question,
+                                   answer="(auto-dismissed: the item completed)")
     services.refresh_index(project)
     return sha_or_err if ok else ""
 

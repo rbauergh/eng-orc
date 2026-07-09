@@ -81,6 +81,47 @@ def test_weak_tests_are_rejected_with_findings(tmp_path):
     assert any("test-review[tests]" in n and "encodes no behavior" in n for n in item.notes)
 
 
+def test_red_check_names_the_failing_tests(tmp_path):
+    """Regression: a reviewer judged '21 failures' through a truncated
+    keyhole and blanket-blocked. The evidence now lists WHICH tests fail so
+    'failing because unimplemented' and 'failing because broken' are
+    distinguishable."""
+    from engorc.orchestrator.phases import _red_check
+
+    config, project, item, _ = _tester_setup(tmp_path)
+    (project.workroom / "test_thing.py").write_text(
+        "def test_alpha():\n    assert False\n"
+        "def test_beta():\n    assert False\n"
+        "def test_gamma():\n    assert True\n")
+    services = _services_with_verdict(config, "approve", [])
+    all_green, execution = _red_check(services, project, item)
+    assert all_green is False
+    assert "Failing tests:" in execution
+    assert "test_alpha" in execution and "test_beta" in execution
+
+
+def test_completed_item_dismisses_its_zombie_gates(tmp_path):
+    """A stuck-gate answered by events (the item recovered and completed)
+    must leave the inbox on its own."""
+    from engorc.agents.toolbox.git import ensure_repo
+    from engorc.orchestrator.phases import _integrate_item
+    from engorc.orchestrator.services import Services
+    from engorc.plan import Plan
+
+    config, project, item, _ = _tester_setup(tmp_path)
+    ensure_repo(project.workroom)
+    plan = Plan(items=[item])
+    project.save_plan(plan)
+    gate = project.gates.open("stuck on this item — advise", from_role="supervisor",
+                              item=item.id)
+    unrelated = project.gates.open("different question", from_role="charterer")
+    services = Services.build(config, client=_services_with_verdict(config, "approve", []).client)
+    _integrate_item(services, project, plan, item)
+    open_ids = {g.id for g in project.gates.open_gates()}
+    assert gate.id not in open_ids          # zombie dismissed
+    assert unrelated.id in open_ids         # unrelated question survives
+
+
 def test_red_check_executes_the_suite_mechanically(tmp_path):
     """TDD's core fact is executed, not asserted: red suites report red,
     green suites report green, no suite reports nothing."""

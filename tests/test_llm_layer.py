@@ -177,6 +177,26 @@ def test_one_shot_prose_self_heals_like_the_structured_path():
     assert len(client.calls) == 2
 
 
+def test_prose_truncated_rumination_is_not_the_answer():
+    """Regression: `orc watch -i` gate chat printed "Here's a thinking
+    process: 1. Analyze User Input…" — the model spent its whole budget in the
+    reasoning channel (finish_reason=length, empty content), and the
+    reasoning-channel rescue returned the rumination as the reply instead of
+    letting the budget-growth retry run."""
+    from engorc.agents.runtime import one_shot_prose
+    from engorc.llm.budget import Section
+
+    replies = iter([
+        ("", "Here's a thinking process: 1. Analyze User Input...", "length"),
+        "Use the staging bucket.",
+    ])
+    client = FakeLLM(lambda *a: next(replies))
+    text, _ = one_shot_prose(client, RoleModel(model="m", thinking=True), "sys",
+                             [Section(name="B", text="b", priority=1)], max_tokens=400)
+    assert text == "Use the staging bucket."
+    assert client.calls[1]["max_tokens"] == 600  # the length failure grew the budget
+
+
 def test_tool_loop_reply_recovered_from_reasoning_channel():
     from engorc.agents.runtime import parse_action
     from engorc.llm.structured import strip_thinking

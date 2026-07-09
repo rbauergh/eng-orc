@@ -199,7 +199,10 @@ def _gate_chat_reply(services, project, gate, question: str,
              "most 5 sentences from the project context. When asked for a recommendation, "
              "give a specific answer they could type verbatim."),
             sections,
-            max_tokens=400,
+            # The reply is capped at 5 sentences, but a thinking architect
+            # spends most of this budget in the reasoning channel first — 400
+            # was routinely eaten whole, leaving no room for the answer.
+            max_tokens=1200,
         )
         return text
 

@@ -611,13 +611,20 @@ def one_shot_prose(
                              extra_body=override)
         usage += result.usage
         text = result.text
-        if not strip_thinking(text).strip() and result.reasoning.strip():
+        truncated = result.finish_reason == "length"
+        if (not strip_thinking(text).strip() and result.reasoning.strip()
+                and not truncated):
+            # A COMPLETED reply whose answer the server parsed into the
+            # reasoning channel (e.g. an unclosed think tag): recover it. A
+            # length-truncated one holds only rumination that never reached an
+            # answer — returning it would hand the user a wall of "Here's a
+            # thinking process…"; fall through to the budget-growth retry.
             text = result.reasoning
         if role_model.thinking:
             text = strip_thinking(text)
         if text.strip():
             return text.strip(), usage
-        if result.finish_reason == "length":
+        if truncated:
             length_failures += 1
             effective_max = int(effective_max * 1.5)
     return "", usage

@@ -835,7 +835,9 @@ def _run_item_loop(
                         text=project.design_path.read_text(encoding="utf-8")
                         if project.design_path.exists() else "", priority=3, truncate="middle"),
             ],
-            max_tokens=500,
+            # same sizing as the gate chat: a thinking architect ruminates
+            # before answering — a tight budget dies mid-thought
+            max_tokens=1200,
         )
         return text
 

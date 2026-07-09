@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import BaseModel
@@ -98,6 +98,7 @@ class ParsedAction:
     tool: str
     args: dict
     payload: str
+    dropped_tools: list = field(default_factory=list)
 
 
 def parse_action(text: str) -> ParsedAction:
@@ -114,8 +115,11 @@ def parse_action(text: str) -> ParsedAction:
             "no ACTION line found. Reply with exactly one line like: "
             'ACTION: tool_name {"arg": "value"} (plus a fenced payload when needed).'
         )
-    if len(matches) > 1:
-        raise FormatError(f"found {len(matches)} ACTION lines; provide EXACTLY ONE action per reply.")
+    # a batched reply (write, then verify, then run) carries real work in its
+    # FIRST action — execute that instead of discarding the whole turn, which
+    # leaves the model believing the work happened. The loop tells the model
+    # the rest did not run.
+    dropped_tools = [m.group(1) for m in matches[1:]]
     match = matches[0]
     tool = match.group(1)
     args: dict = {}
@@ -129,12 +133,16 @@ def parse_action(text: str) -> ParsedAction:
             ) from exc
         if not isinstance(args, dict):
             raise FormatError("ACTION args must be a JSON object")
-    payload_match = _FENCE_RE.search(text, match.end())
+    # the payload fence must sit between this action and the next one, so a
+    # payload-less first action can't steal a later action's fence
+    payload_end = matches[1].start() if dropped_tools else len(text)
+    payload_match = _FENCE_RE.search(text, match.end(), payload_end)
     payload = payload_match.group(1) if payload_match else ""
     if payload.endswith("\n"):
         payload = payload[:-1]
     thought = text[: match.start()].strip()
-    return ParsedAction(thought=thought, tool=tool, args=args, payload=payload)
+    return ParsedAction(thought=thought, tool=tool, args=args, payload=payload,
+                        dropped_tools=dropped_tools)
 
 
 class AttemptResult(BaseModel):
@@ -268,6 +276,13 @@ class ToolLoop:
                             "use the fence next time."
                         )
                         break
+            if action.dropped_tools:
+                salvage_note += (
+                    f"\n\nNOTE: your reply had {len(action.dropped_tools) + 1} ACTION "
+                    f"lines; only the FIRST ({action.tool}) ran. NOT run: "
+                    f"{', '.join(action.dropped_tools)}. Send exactly ONE action per "
+                    "reply — resend the others one at a time, waiting for each result."
+                )
 
             signature = f"{action.tool}|{json.dumps(action.args, sort_keys=True)}|{hash(action.payload)}"
             if signature == last_signature:

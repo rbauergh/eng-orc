@@ -102,6 +102,25 @@ def test_plan_dag_validation_and_readiness(tmp_path):
     assert len(loaded.items) == 2 and loaded.items[1].depends_on == [loaded.items[0].id]
 
 
+def test_attempt_label_counts_only_failures():
+    """Regression: an implementer picking up a TDD item after two tester
+    attempts (one stuck, one success) was announced as 'attempt 3/3' — the
+    display counted every attempt record against a cap that only failures
+    consume, so a fresh implementer looked like a last-chance swing."""
+    from engorc.plan import AttemptRecord
+
+    item = WorkItem(title="renderer")
+    assert item.attempt_label(3) == "attempt 1/3"
+    item.attempts.append(AttemptRecord(role="tester", outcome="stuck"))
+    item.attempts.append(AttemptRecord(role="tester", outcome="success"))
+    item.attempts.append(AttemptRecord(role="implementer"))  # in flight
+    assert item.attempt_label(3) == "attempt 2/3"
+    assert item.open_attempt_count() == 1
+    item.attempts.append(AttemptRecord(role="implementer", outcome="fail"))
+    item.attempts.append(AttemptRecord(role="implementer", outcome="error"))
+    assert item.attempt_label(3) == "attempt 3/3"  # clamped at the cap
+
+
 def test_every_routable_phase_is_a_valid_meta_phase():
     """Regression: the 'request' phase existed in the router and PHASES but
     not in ProjectMeta's Literal — the scheduler wrote it (attribute mutation

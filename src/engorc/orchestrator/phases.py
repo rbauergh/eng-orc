@@ -812,7 +812,7 @@ def _run_item_loop(
     log.agent(
         role_name,
         f"starting '{shorten(item.title, 60)}' "
-        f"(attempt {len(item.attempts)}/{config.run.max_attempts_per_item}, model {role_model.model})",
+        f"({item.attempt_label(config.run.max_attempts_per_item)}, model {role_model.model})",
     )
 
     services.observe_gpu()

@@ -139,7 +139,9 @@ def test_plan_rows_draw_the_dependency_tree():
     from engorc.plan import Plan, WorkItem
 
     done = WorkItem(title="Scaffold", status="done")
+    done.attempts.append(AttemptRecord(role="implementer", outcome="success"))
     current = WorkItem(title="Core Board Logic", status="in_progress", depends_on=[done.id])
+    current.attempts.append(AttemptRecord(role="tester", outcome="stuck"))
     current.attempts.append(AttemptRecord(role="implementer"))
     renderer = WorkItem(title="Renderer", depends_on=[done.id])
     gated = WorkItem(title="Build Executable", depends_on=[current.id, renderer.id])
@@ -147,8 +149,9 @@ def test_plan_rows_draw_the_dependency_tree():
 
     rows = _plan_rows(plan, max_attempts=3)
     lines = [line for _, line in rows]
-    assert lines[0].startswith("✔ Scaffold")
-    assert lines[1].startswith("├─▶ Core Board Logic") and "1/3" in lines[1]
+    # only failures burn budget: the cleanly-done item shows no counter
+    assert lines[0].startswith("✔ Scaffold") and "/3" not in lines[0]
+    assert lines[1].startswith("├─▶ Core Board Logic") and "1✗/3" in lines[1]
     # blocked item hangs under its gating dependency: a dim dot, no prose
     assert lines[2].startswith("│  └─· Build Executable") and "⇠ +1" in lines[2]
     assert lines[3].startswith("└─○ Renderer")  # ready-to-run gets the open circle

@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from .base import Tool, ToolContext, ToolResult
@@ -123,24 +125,73 @@ def _subprocess_env(ctx: ToolContext) -> dict:
     return env
 
 
+def _read_stream(stream, sink: list) -> None:
+    try:
+        sink.append(stream.read())
+    except Exception:
+        pass  # stream closed under us during group kill
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def run_command(ctx: ToolContext, command: str, timeout: float) -> ToolResult:
+    """Run bash in its own process group, reaping the WHOLE group at the end.
+
+    A command that launches a detached child (a GUI binary, a stray server)
+    would otherwise hold the output pipes open — capture then blocks until
+    the tool timeout even though bash itself exited in seconds — and the
+    orphan lives on, eating the box. Reader threads drain the pipes without
+    deadlock; once bash exits (or times out) the group is killed, which
+    guarantees the readers reach EOF."""
     reason = _denied(command)
     if reason:
         return ToolResult(ok=False, output=reason)
+    proc = subprocess.Popen(
+        ["bash", "-c", command],
+        cwd=ctx.workroom,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",  # commands may emit raw binary bytes
+        env=_subprocess_env(ctx),
+        start_new_session=True,
+    )
+    out_sink: list[str] = []
+    err_sink: list[str] = []
+    readers = [
+        threading.Thread(target=_read_stream, args=(proc.stdout, out_sink), daemon=True),
+        threading.Thread(target=_read_stream, args=(proc.stderr, err_sink), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    timed_out = False
     try:
-        proc = subprocess.run(
-            ["bash", "-c", command],
-            cwd=ctx.workroom,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",  # commands may emit raw binary bytes
-            timeout=timeout,
-            env=_subprocess_env(ctx),
-        )
+        proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        return ToolResult(ok=False, output=f"timed out after {timeout:.0f}s: {command[:200]}")
-    output = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+        timed_out = True
+    for reader in readers:  # brief grace: orphan-free pipes EOF instantly
+        reader.join(timeout=0 if timed_out else 2.0)
+    _kill_group(proc)
+    for reader in readers:  # group is dead, so EOF is guaranteed now
+        reader.join()
+    proc.wait()
+    stdout = out_sink[0] if out_sink else ""
+    stderr = err_sink[0] if err_sink else ""
+    if timed_out:
+        partial = (stdout + (("\n" + stderr) if stderr else "")).strip()
+        return ToolResult(
+            ok=False,
+            output=f"timed out after {timeout:.0f}s: {command[:200]}"
+            + (f"\noutput before the timeout:\n{partial}" if partial else ""),
+            data={"timed_out": True},
+        )
+    output = (stdout or "") + (("\n" + stderr) if stderr else "")
     # a bare exit code teaches nothing — an empty find/grep result must SAY
     # it found nothing, or the model retries the same probe forever
     if output.strip():
@@ -160,7 +211,14 @@ def run_command(ctx: ToolContext, command: str, timeout: float) -> ToolResult:
 def run(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     command = payload.strip() or str(args.get("command", "")).strip()
     if not command:
-        return ToolResult(ok=False, output="run needs the shell command in the fenced payload")
+        return ToolResult(ok=False, output=(
+            "run needs the shell command in the fenced payload. Resend as:\n"
+            "ACTION: run {}\n"
+            "```bash\n"
+            "pytest -q\n"
+            "```\n"
+            "(your command in place of `pytest -q` — the fence goes AFTER the ACTION line)"
+        ))
     timeout = min(float(args.get("timeout", ctx.config.run.shell_timeout)), 1800.0)
     return run_command(ctx, command, timeout)
 

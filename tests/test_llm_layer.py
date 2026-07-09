@@ -32,13 +32,42 @@ def test_parse_action_happy_path():
     assert "write the file" in action.thought
 
 
-def test_parse_action_rejects_zero_and_multiple():
+def test_parse_action_rejects_no_action_and_bad_json():
     with pytest.raises(FormatError):
         parse_action("no action here at all")
     with pytest.raises(FormatError):
-        parse_action("ACTION: run {}\nACTION: finish {}")
-    with pytest.raises(FormatError):
         parse_action('ACTION: run {"broken: json}')
+
+
+def test_multi_action_reply_salvages_the_first():
+    """Regression: a batched reply (write_file with a complete test file,
+    then list_dir, then run) was rejected wholesale — the file never got
+    written, and the model spiraled on a file it believed should exist."""
+    text = (
+        'ACTION: write_file {"path": "test_performance.py"}\n'
+        "```python\nimport time\n```\n"
+        "Now verify it exists:\n\n"
+        'ACTION: list_dir {"path": "."}\n'
+        "```plaintext\n```\n"
+        'ACTION: run {"timeout": 300}\n'
+        "```bash\npytest -q\n```\n"
+    )
+    action = parse_action(text)
+    assert action.tool == "write_file"
+    assert action.args == {"path": "test_performance.py"}
+    assert action.payload == "import time"
+    assert action.dropped_tools == ["list_dir", "run"]
+
+
+def test_multi_action_first_cannot_steal_a_later_fence():
+    action = parse_action(
+        "ACTION: list_dir {}\n"
+        'ACTION: run {"timeout": 60}\n'
+        "```bash\nls\n```\n"
+    )
+    assert action.tool == "list_dir"
+    assert action.payload == ""
+    assert action.dropped_tools == ["run"]
 
 
 def test_parse_action_code_payload_never_needs_escaping():

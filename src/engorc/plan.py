@@ -64,6 +64,14 @@ class WorkItem(BaseModel):
     def open_attempt_count(self) -> int:
         return sum(1 for a in self.attempts if a.outcome in ("fail", "stuck", "error"))
 
+    def attempt_label(self, max_attempts: int) -> str:
+        """Budget counter for a starting/in-flight attempt. Only failed
+        attempts consume the per-item budget — successes and in-flight
+        records don't (mirrors pick_item/exhausted_items) — so the label
+        numbers this swing against the budget actually remaining."""
+        swing = min(self.open_attempt_count() + 1, max_attempts)
+        return f"attempt {swing}/{max_attempts}"
+
     def last_attempt(self) -> AttemptRecord | None:
         return self.attempts[-1] if self.attempts else None
 

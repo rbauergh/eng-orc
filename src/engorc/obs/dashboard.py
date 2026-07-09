@@ -211,7 +211,7 @@ def _sparkline(values: deque[int]) -> str:
     return "".join(_SPARK_CHARS[min(7, v * 8 // 100)] for v in values)
 
 
-def _current_attempt_line(project, plan) -> NowLine | None:
+def _current_attempt_line(project, plan, max_attempts: int) -> NowLine | None:
     active = [item for item in plan.items if item.status == "in_progress"]
     if not active:
         return None
@@ -222,7 +222,7 @@ def _current_attempt_line(project, plan) -> NowLine | None:
     parts = [f"{attempt.role if attempt else '?'} on “{shorten(item.title, 46)}”"]
     if attempt:
         parts.append(f"model {attempt.model}")
-        parts.append(f"attempt {len(item.attempts)}")
+        parts.append(item.attempt_label(max_attempts))
     if last_turn is not None:
         parts.append(
             f"turn {last_turn.payload.get('turn')} · {last_turn.payload.get('tool')}"
@@ -300,7 +300,7 @@ def gather_snapshot(services, details: bool = False) -> Snapshot:
             str(len(gates)) if gates else "-",
             human_age(meta.last_active),
         ))
-        now_line = _current_attempt_line(project, plan)
+        now_line = _current_attempt_line(project, plan, config.run.max_attempts_per_item)
         if now_line is not None and meta.state == "active":
             snapshot.now.append(now_line)
         for event in project.journal.tail(50):
@@ -480,8 +480,11 @@ def _plan_rows(plan, max_attempts: int) -> list[tuple[bool, str]]:
 
     def meta(item) -> str:
         bits = []
-        if item.attempts:
-            bits.append(f"{len(item.attempts)}/{max_attempts}")
+        # budget display: only failures burn it — a clean run stays quiet,
+        # and "N✗" creeping toward the cap signals triage proximity
+        fails = item.open_attempt_count()
+        if fails:
+            bits.append(f"{fails}✗/{max_attempts}")
         if item.status != "todo":
             bits.append(human_age(item.updated))
         extra = len([d for d in item.depends_on if d in by_id]) - 1

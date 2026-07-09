@@ -203,6 +203,61 @@ def test_payload_in_json_args_is_salvaged_with_a_nudge(ctx, config):
     assert "fenced" in second_call and "Accepted this time" in second_call
 
 
+def test_batched_actions_execute_the_first_and_say_so(ctx, config):
+    """Regression: three ACTION lines in one reply were rejected wholesale,
+    discarding a complete write_file payload; the model then spent the rest
+    of the attempt hunting for a file it believed it had written."""
+    from engorc.llm.fake import FakeLLM
+
+    seen: list[list[dict]] = []
+    replies = iter([
+        'batch\n\nACTION: write_file {"path": "notes.txt"}\n```\nhello\n```\n'
+        'ACTION: run {"timeout": 60}\n```bash\ncat notes.txt\n```\n',
+        'done\n\nACTION: finish {"status": "done"}\n```payload\nok\n```\n',
+    ])
+
+    def brain(messages, response_format, role_model):
+        seen.append(messages)
+        return next(replies)
+
+    result = _loop(ctx, config, FakeLLM(brain)).run("brief", "task", max_turns=5)
+    assert result.status == "done"
+    assert (ctx.workroom / "notes.txt").read_text().strip() == "hello"
+    second_call = seen[1][-1]["content"]
+    assert "only the FIRST" in second_call and "NOT run: run" in second_call
+
+
+def test_orphan_holding_the_pipe_does_not_stall_the_capture(ctx):
+    """Regression: a verify command launched the built game and exited in
+    seconds, but the detached process inherited stdout — the capture blocked
+    for the full 600s tool timeout, and the orphan kept running afterward.
+    The group kill guarantees the readers reach EOF (an EOF is only possible
+    once every inherited writer is dead)."""
+    import time
+
+    from engorc.agents.toolbox.shell import run_command
+
+    start = time.monotonic()
+    result = run_command(ctx, "echo started; sleep 300 &", timeout=60)
+    elapsed = time.monotonic() - start
+    assert result.ok and "started" in result.output
+    assert elapsed < 30  # the ~2s grace + group kill, not the 60s timeout
+
+
+def test_timeout_kills_the_group_and_keeps_partial_output(ctx):
+    import time
+
+    from engorc.agents.toolbox.shell import run_command
+
+    start = time.monotonic()
+    result = run_command(ctx, "echo progress; sleep 60", timeout=1)
+    elapsed = time.monotonic() - start
+    assert not result.ok and result.data.get("timed_out") is True
+    assert "timed out after 1s" in result.output
+    assert "progress" in result.output  # evidence survives the timeout
+    assert elapsed < 20
+
+
 def test_truncated_reply_missing_payload_grows_budget(ctx, config):
     """Regression: the output budget died right after the ACTION line, the
     payload fence never appeared, and the tool's emptiness error repeated

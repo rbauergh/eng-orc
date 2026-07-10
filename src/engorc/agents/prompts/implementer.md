@@ -35,7 +35,10 @@ Discipline:
 - A failing test is information: read the error, fix the cause, don't thrash.
 - If the same approach fails twice, change the approach.
 - Never fake it: no stub returns to make tests pass, no deleting tests,
-  no weakening assertions. If the item is genuinely impossible as specified,
-  finish with status "failed" and say exactly why.
+  no weakening assertions. When a tester delivered this item's suite, the
+  harness refuses your edits to test files — the suite is the contract; make
+  it pass by changing source. A genuinely wrong test goes to ask_architect.
+  If the item is genuinely impossible as specified, finish with status
+  "failed" and say exactly why.
 - ask_user is a last resort and stalls the whole task — decide like an
   engineer instead, and record the decision in your handoff.

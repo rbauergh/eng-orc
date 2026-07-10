@@ -49,6 +49,42 @@ def test_binary_workroom_content_never_crashes_decoding(ctx):
     assert result.ok and "exit code 0" in result.output
 
 
+def test_role_boundary_keeps_the_tester_out_of_source(ctx):
+    """Regression: a tester on 'add error handling to main.py' edited main.py
+    itself — implementing the item to green its own tests, leaving the
+    implementer an empty diff and bypassing the full review panel (tester
+    diffs only get the tests-lens review)."""
+    from engorc.agents.toolbox.fs import is_test_path
+
+    ctx.role = "tester"
+    result = tool("write_file").run(ctx, {"path": "connect4/main.py"}, "x = 1")
+    assert not result.ok and "role boundary" in result.output
+    assert "finish with a" in result.output  # the refusal names the escape hatch
+    assert not (ctx.workroom / "connect4/main.py").exists()
+
+    for allowed in ("test_main.py", "tests/fixtures/conftest.py", "ui/app.spec.ts"):
+        result = tool("write_file").run(ctx, {"path": allowed}, "assert True")
+        assert result.ok, allowed
+
+    assert not is_test_path("contest.py")  # near-miss names stay source
+
+
+def test_role_boundary_keeps_the_implementer_out_of_a_delivered_suite(ctx):
+    from engorc.agents.toolbox.fs import DIVIDER_MARK, REPLACE_MARK, SEARCH_MARK
+
+    (ctx.workroom / "test_main.py").write_text("def test_x():\n    assert False\n")
+    payload = f"{SEARCH_MARK}\nassert False\n{DIVIDER_MARK}\nassert True\n{REPLACE_MARK}"
+
+    ctx.role = "implementer"  # no tester on this item: tests are theirs to write
+    assert tool("edit_file").run(ctx, {"path": "test_main.py"}, payload).ok
+
+    ctx.extras["suite_owned"] = True
+    result = tool("edit_file").run(ctx, {"path": "test_main.py"}, payload)
+    assert not result.ok and "contract" in result.output
+    result = tool("write_file").run(ctx, {"path": "main.py"}, "x = 1")
+    assert result.ok  # source stays fully theirs
+
+
 def test_silent_success_says_so(ctx):
     """Regression: a find over a nonexistent path exits 0 with nothing — the
     bare 'exit code 0' observation taught the model nothing and it retried

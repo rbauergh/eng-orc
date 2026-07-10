@@ -9,11 +9,12 @@ guards the invariants (unique ids, existing deps, acyclic).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .fsio import atomic_write_yaml, read_yaml
 from .util import iso_now, new_id
@@ -24,6 +25,16 @@ ItemSize = Literal["S", "M", "L"]
 
 TERMINAL_STATUSES: tuple[str, ...] = ("done", "dropped")
 OPEN_STATUSES: tuple[str, ...] = ("todo", "in_progress", "blocked", "review", "failed")
+
+_PHANTOM_ROOT_RE = re.compile(r"(?<![\w./-])/(?:workspaces?|app|workdir|code|project|repo)\b")
+
+
+def sanitize_verify_commands(commands: list[str]) -> list[str]:
+    """Verification runs with the project root as cwd. Models raised on
+    container CI write absolute roots like /workspace that exist nowhere
+    here; rewritten to '.', the command tests the code instead of the
+    environment. Real paths (/tmp, /usr) and URLs pass through untouched."""
+    return [_PHANTOM_ROOT_RE.sub(".", command) for command in commands]
 
 
 class AttemptRecord(BaseModel):
@@ -57,6 +68,13 @@ class WorkItem(BaseModel):
     notes: list[str] = Field(default_factory=list)
     created: str = Field(default_factory=iso_now)
     updated: str = Field(default_factory=iso_now)
+
+    @field_validator("verify_commands")
+    @classmethod
+    def _sanitize_verify(cls, commands: list[str]) -> list[str]:
+        # fires at construction AND at plan load, so hand-poisoned items on
+        # disk heal the next time the plan is read
+        return sanitize_verify_commands(commands)
 
     def touch(self) -> None:
         self.updated = iso_now()

@@ -102,6 +102,28 @@ def test_plan_dag_validation_and_readiness(tmp_path):
     assert len(loaded.items) == 2 and loaded.items[1].depends_on == [loaded.items[0].id]
 
 
+def test_phantom_container_roots_in_verify_commands_are_rewritten():
+    """Regression: a planner/triage-authored item verified with
+    `cd /workspace && python3 -c "... '/workspace' ..."` — /workspace exists
+    only in the container CI examples the models were trained on. Three
+    implementer attempts burned against 'cd: /workspace: No such file or
+    directory', and triage doubled down because the item text primed it."""
+    item = WorkItem(title="x", verify_commands=[
+        "cd /workspace && python3 -c \"p = os.path.join('/workspace', 'connect4')\"",
+        "pytest -q --cov=/app tests/",
+        "curl https://app.example.com/health && ls /tmp/cache",
+    ])
+    assert item.verify_commands[0] == \
+        "cd . && python3 -c \"p = os.path.join('.', 'connect4')\""
+    assert item.verify_commands[1] == "pytest -q --cov=. tests/"
+    # URLs and real absolute paths pass through untouched
+    assert item.verify_commands[2] == "curl https://app.example.com/health && ls /tmp/cache"
+
+    from engorc.plan import sanitize_verify_commands
+    assert sanitize_verify_commands(["ls /workspaces/thing"]) == ["ls ./thing"]
+    assert sanitize_verify_commands(["run /application/x"]) == ["run /application/x"]
+
+
 def test_attempt_label_counts_only_failures():
     """Regression: an implementer picking up a TDD item after two tester
     attempts (one stuck, one success) was announced as 'attempt 3/3' — the

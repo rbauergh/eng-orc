@@ -36,6 +36,43 @@ def _syntax_gate(path_name: str, content: str) -> str | None:
     return None
 
 
+_TEST_DIR_NAMES = {"test", "tests", "__tests__", "testing", "spec", "specs"}
+_TEST_FILE_RE = re.compile(r"^(test_[^/]*|[^/]*_test|conftest)\.\w+$|^[^/]*\.(test|spec)\.\w+$",
+                           re.IGNORECASE)
+
+
+def is_test_path(rel: str) -> bool:
+    """Classify by test-file convention, not project layout — projects here
+    range from tests/ trees to test_*.py beside the source."""
+    parts = rel.replace("\\", "/").strip("/").split("/")
+    if any(part.lower() in _TEST_DIR_NAMES for part in parts[:-1]):
+        return True
+    return bool(parts[-1]) and bool(_TEST_FILE_RE.match(parts[-1]))
+
+
+def _role_boundary(ctx: ToolContext, rel: str) -> str | None:
+    """TDD holds mechanically, not by prompt alone: the tester changes only
+    tests, and the implementer may not rewrite a suite a tester delivered —
+    greening a red test by editing the test is tampering, and source changes
+    smuggled through the tester bypass the full review panel."""
+    if ctx.role == "tester" and not is_test_path(rel):
+        return (
+            f"role boundary: {rel} is source, and the tester changes only test files "
+            "(test_*.py, *_test.*, conftest.py, or anything under tests/). Implementation "
+            "belongs to the implementer — your new tests SHOULD fail until it runs. If "
+            "source must change before tests can even import or run, finish with a "
+            "handoff note saying exactly what to change."
+        )
+    if ctx.role == "implementer" and ctx.extras.get("suite_owned") and is_test_path(rel):
+        return (
+            f"role boundary: {rel} is a test file, and the tester delivered this item's "
+            "suite — it is the contract your implementation must meet, not something to "
+            "edit into passing. Change the source instead. If a test is genuinely wrong, "
+            "raise it via ask_architect or in your finish handoff."
+        )
+    return None
+
+
 def read_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     path = ctx.jail(str(args.get("path", "")))
     if not path.is_file():
@@ -54,6 +91,9 @@ def read_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
 def write_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     rel = str(args.get("path", ""))
     path = ctx.jail(rel)
+    boundary = _role_boundary(ctx, rel)
+    if boundary:
+        return ToolResult(ok=False, output=boundary)
     if not payload:
         return ToolResult(ok=False, output=(
             "write_file needs the file content in the fenced payload block, exactly like:\n"
@@ -164,6 +204,9 @@ def _closest_region(text: str, search: str) -> str:
 def edit_file(ctx: ToolContext, args: dict, payload: str) -> ToolResult:
     rel = str(args.get("path", ""))
     path = ctx.jail(rel)
+    boundary = _role_boundary(ctx, rel)
+    if boundary:
+        return ToolResult(ok=False, output=boundary)
     if not path.is_file():
         return ToolResult(ok=False, output=f"no such file: {rel}")
     blocks = _parse_search_replace(payload)

@@ -42,8 +42,8 @@ class Charter(BaseModel):
     build_commands: list[str] = Field(
         default_factory=list,
         description="commands that (re)build the project's SHIPPED artifacts (executable, "
-        "dist/, package) — run at every wrap so builds never go stale; empty when the "
-        "project ships nothing built",
+        "dist/, package) — run from the project root (relative paths only) at every wrap "
+        "so builds never go stale; empty when the project ships nothing built",
     )
     ready_to_build: bool
 
@@ -69,7 +69,9 @@ class PlanItemDraft(BaseModel):
     description: str = Field(description="what to build and how it fits the design; concrete enough to start")
     acceptance: list[str] = Field(description="checkable statements that define done")
     verify_commands: list[str] = Field(
-        description="shell commands that must exit 0 (e.g. 'python3 -m pytest -q'); empty = project default"
+        description="shell commands that must exit 0, run FROM THE PROJECT ROOT "
+        "(e.g. 'python3 -m pytest -q'). Relative paths only — absolute roots like "
+        "/workspace or /app do not exist here. empty = project default"
     )
     depends_on: list[int] = Field(description="indices (0-based) of items in this plan that must finish first")
     files_hint: list[str] = Field(description="files likely touched")
@@ -128,7 +130,10 @@ class ItemTriage(BaseModel):
     guidance: str = Field(description="concrete direction for the next attempt (revise/retry); empty otherwise")
     new_description: str = Field(description="revise: replacement description; empty otherwise")
     new_acceptance: list[str] = Field(description="revise: replacement acceptance criteria; empty = keep")
-    new_verify_commands: list[str] = Field(description="revise: replacement verify commands; empty = keep")
+    new_verify_commands: list[str] = Field(
+        description="revise: replacement verify commands, run from the project root "
+        "with relative paths only; empty = keep"
+    )
     split_items: list[PlanItemDraft] = Field(
         description="split: the smaller replacement items, in order. depends_on indices "
         "refer to positions WITHIN this list; the parent's dependencies are inherited "

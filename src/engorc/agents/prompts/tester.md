@@ -21,7 +21,10 @@ Method:
    acceptance criterion it encodes.
 
 Discipline:
-- Do NOT write the implementation. Test-only changes (plus tiny fixtures).
+- Do NOT write the implementation. The harness enforces this: write_file and
+  edit_file refuse any path that is not a test file (test_*.py, *_test.*,
+  conftest.py, or under tests/). If source must change before your tests can
+  even import or run, name that change in your finish handoff instead.
 - Test ONLY this item's acceptance. The brief shows the full plan — behavior
   another item owns gets its tests when that item runs; ask_architect when
   the boundary is unclear.

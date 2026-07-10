@@ -40,7 +40,13 @@ from ..llm.catalog import model_for_agent
 from ..llm.structured import StructuredError
 from ..memory.schema import MemoryItem
 from ..obs.console import log
-from ..plan import TERMINAL_STATUSES, AttemptRecord, Plan, WorkItem
+from ..plan import (
+    TERMINAL_STATUSES,
+    AttemptRecord,
+    Plan,
+    WorkItem,
+    sanitize_verify_commands,
+)
 from ..project import Project
 from ..util import iso_now, shorten, truncate_middle
 from . import briefs, supervisor
@@ -646,7 +652,7 @@ def _run_triage(services: Services, project: Project, plan: Plan, items: list[Wo
                 if entry.new_acceptance:
                     item.acceptance = entry.new_acceptance
                 if entry.new_verify_commands:
-                    item.verify_commands = entry.new_verify_commands
+                    item.verify_commands = sanitize_verify_commands(entry.new_verify_commands)
             item.notes.append(marker)
             if entry.guidance:
                 item.notes.append(f"triage guidance: {shorten(entry.guidance, 300)}")
@@ -849,7 +855,11 @@ def _run_item_loop(
         role=role_name,
         index=services.context_for(project).index,
         extras={"phase": "build", "verify_commands": item.verify_commands,
-                "consult_architect": consult_architect},
+                "consult_architect": consult_architect,
+                # the fs-tool role boundary: once a tester has delivered this
+                # item's suite, the implementer may not edit test files
+                "suite_owned": any(a.role == "tester" and a.outcome == "success"
+                                   for a in item.attempts)},
     )
     ensure_project_venv(ctx)  # the dependency sandbox: pip installs stay project-local
     sections, consumed = briefs.item_brief(services, project, plan, item, config)
@@ -1564,7 +1574,8 @@ def _build_check(services: Services, project: Project, plan: Plan) -> str | None
     item is queued and the project returns to the build phase. Returns a
     step note when wrap must wait; None when artifacts are fresh."""
     charter = project.charter() or {}
-    commands = [str(c) for c in (charter.get("build_commands") or []) if str(c).strip()]
+    commands = sanitize_verify_commands(
+        [str(c) for c in (charter.get("build_commands") or []) if str(c).strip()])
     if not commands:
         detected = _detect_build_command(project.workroom)
         commands = [detected] if detected else []
